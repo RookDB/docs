@@ -4,6 +4,8 @@ const sidebars: SidebarsConfig = {
   tutorialSidebar: [
     // Auto-generated content from existing docs
     'index',
+    'Rook-Parser',
+    'Storage-Engine',
     'API-Doc',
     'database-doc',
     'design-doc',
