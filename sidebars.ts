@@ -4,12 +4,22 @@ const sidebars: SidebarsConfig = {
   tutorialSidebar: [
     // Auto-generated content from existing docs
     'index',
-    'Rook-Parser',
+     // Rook Parser Category
+    {
+      type: 'category',
+      label: 'Rook Parser',
+      collapsed: true,
+      items: [
+        'rook-parser/Rook-Parser',
+      ],
+    },
+    
     'Storage-Engine',
     'API-Doc',
     'database-doc',
     'design-doc',
     'User-Guide',
+
     
     // Manually configured Projects section
     {
