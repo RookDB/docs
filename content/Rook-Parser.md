@@ -10,6 +10,12 @@ Rook Parser is published as a Rust crate and is available at: [Rook Parser Crate
 
 The crate exposes APIs that take a **SQL statement as input** and return a **custom JSON output** tailored to the requirements of **RookDB**.
 
+## Supporting Statement API's
+* `SHOW DATABASES`;
+* `SHOW TABLES`;
+* `CREATE DATABASE db_name`;
+* `USE db_name`;
+
 ### API output Response
 ```json
 {
@@ -79,11 +85,3 @@ enum ParamsEnum {
 
 ---
 
-## Few Starting API's
-* `SHOW DATABASES`;
-* `CREATE DATABASE db_name`;
-* `SELECT DATABASE db_name`;
-* `SHOW TABLES`;
-* `CREATE TABLE table_name ...`;
-* `SELECT * FROM table_name`;
-* `INSERT INTO table_name`;

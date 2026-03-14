@@ -10,7 +10,7 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "Storage Engine",
-      collapsed: true,
+      collapsed: false,
       items: [
         "storage-engine/Introduction",
         "storage-engine/API-Doc",
