@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="generator" content="Docusaurus v3.9.2">
 <title data-rh="true">Design Doc | RookDB Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://rookdb.github.io/docs/img/docusaurus-social-card.jpg"><meta data-rh="true" name="twitter:image" content="https://rookdb.github.io/docs/img/docusaurus-social-card.jpg"><meta data-rh="true" property="og:url" content="https://rookdb.github.io/docs/storage-engine/design-doc"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Design Doc | RookDB Docs"><meta data-rh="true" name="description" content="Introduction to RookDB"><meta data-rh="true" property="og:description" content="Introduction to RookDB"><link data-rh="true" rel="canonical" href="https://rookdb.github.io/docs/storage-engine/design-doc"><link data-rh="true" rel="alternate" href="https://rookdb.github.io/docs/storage-engine/design-doc" hreflang="en"><link data-rh="true" rel="alternate" href="https://rookdb.github.io/docs/storage-engine/design-doc" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Design Doc","item":"https://rookdb.github.io/docs/storage-engine/design-doc"}]}</script><link rel="stylesheet" href="/docs/assets/css/styles.4b065cb5.css">
-<script src="/docs/assets/js/runtime~main.7f4ac165.js" defer="defer"></script>
-<script src="/docs/assets/js/main.423ff399.js" defer="defer"></script>
+<script src="/docs/assets/js/runtime~main.e5470a4c.js" defer="defer"></script>
+<script src="/docs/assets/js/main.a5009d49.js" defer="defer"></script>
 </head>
 <body class="navigation-with-keyboard">
 <svg style="display: none;"><defs>
@@ -18,7 +18,7 @@
 <hr>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="rookdb-architecture">RookDB Architecture<a href="#rookdb-architecture" class="hash-link" aria-label="Direct link to RookDB Architecture" title="Direct link to RookDB Architecture" translate="no">​</a></h2>
 <p>The architecture of RookDB follows a layered design that separates logical metadata management from the physical representation of tables and the low-level organization of records within pages.</p>
-<p>The storage manager in RookDB is broadly divided into the following four layers:</p>
+<p>The storage manager in RookDB is broadly divided into the following layers:</p>
 <ul>
 <li class="">Catalog Layer</li>
 <li class="">Table Layer</li>
@@ -27,9 +27,18 @@
 </ul>
 <hr>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="catalog-layer">Catalog Layer<a href="#catalog-layer" class="hash-link" aria-label="Direct link to Catalog Layer" title="Direct link to Catalog Layer" translate="no">​</a></h2>
-<p>The Catalog Layer is responsible for managing logical metadata required by the database system.<br>
-<!-- -->It maintains information about databases, tables, and column schemas. In RookDB, catalog metadata is stored in a JSON format.</p>
-<p>For a detailed description of the catalog structure, refer to the Database Design Document available in the docs section of the GitHub repository.</p>
+<p>The Catalog Layer is responsible for managing all logical metadata required by the database system — databases, tables, columns, constraints, indexes, and data types.</p>
+<p>RookDB implements a <strong>self-hosting, page-based catalog system</strong> modelled after PostgreSQL&#x27;s system catalogs. Metadata is stored in six dedicated system catalog files (<code>pg_database</code>, <code>pg_table</code>, <code>pg_column</code>, <code>pg_constraint</code>, <code>pg_index</code>, <code>pg_type</code>) using the same 8 KB slotted-page format as user tables.</p>
+<p>Key capabilities of the Catalog Layer include:</p>
+<ul>
+<li class=""><strong>OID (Object Identifier) system</strong> — every database object receives a globally unique 32-bit identifier, enabling robust cross-references between catalog entries.</li>
+<li class=""><strong>Constraint management</strong> — supports Primary Key, Foreign Key (with cascading actions), Unique, NOT NULL, and Check constraints.</li>
+<li class=""><strong>Extended type system</strong> — ten built-in types (INT, BIGINT, FLOAT, DOUBLE, BOOL, TEXT, VARCHAR, DATE, TIMESTAMP, BYTES) with alignment and length metadata.</li>
+<li class=""><strong>In-memory LRU cache</strong> — reduces disk I/O for frequently accessed metadata with automatic invalidation on DDL operations.</li>
+<li class=""><strong>Buffer Manager integration</strong> — all catalog I/O is routed through the Buffer Manager for efficient page caching.</li>
+</ul>
+<p>A legacy JSON-based catalog (<code>catalog.json</code>) is retained for backward compatibility. On a fresh install, the system bootstraps directly into page-based mode.</p>
+<p>For a detailed description of the catalog architecture, see the <a class="" href="/docs/storage-engine/projects/catalog-manager/">Catalog Manager</a> documentation.</p>
 <hr>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="table-layer">Table Layer<a href="#table-layer" class="hash-link" aria-label="Direct link to Table Layer" title="Direct link to Table Layer" translate="no">​</a></h2>
 <p>In RookDB, each table is stored as a dedicated file within the directory corresponding to its parent database. This hierarchical organization mirrors the structure of the catalog and provides a deterministic mapping from logical table identifiers to their physical storage locations on disk.</p>
@@ -42,6 +51,7 @@
 <p><img decoding="async" loading="lazy" alt="Logical Layout of a Page" src="/docs/assets/images/Page-Architecture-f1ec84b6a19497f2a51a69d6c5b69d7d.png" width="764" height="438" class="img_ev3q"></p>
 <hr>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="buffer-manager-layer">Buffer Manager Layer<a href="#buffer-manager-layer" class="hash-link" aria-label="Direct link to Buffer Manager Layer" title="Direct link to Buffer Manager Layer" translate="no">​</a></h2>
-<p>The Buffer Manager Layer maintains an in-memory cache of pages to minimize disk I/O and efficiently support data loading and manipulation.</p></div></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/docs/storage-engine/database-doc"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Database Doc</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/docs/storage-engine/Developer-Guide"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Developer Guide</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#introduction-to-rookdb" class="table-of-contents__link toc-highlight">Introduction to RookDB</a></li><li><a href="#rookdb-architecture" class="table-of-contents__link toc-highlight">RookDB Architecture</a></li><li><a href="#catalog-layer" class="table-of-contents__link toc-highlight">Catalog Layer</a></li><li><a href="#table-layer" class="table-of-contents__link toc-highlight">Table Layer</a></li><li><a href="#page-layer" class="table-of-contents__link toc-highlight">Page Layer</a></li><li><a href="#buffer-manager-layer" class="table-of-contents__link toc-highlight">Buffer Manager Layer</a></li></ul></div></div></div></div></main></div></div></div></div>
+<p>The Buffer Manager Layer maintains an in-memory cache of pages to minimize disk I/O and efficiently support data loading and manipulation. It uses pin/unpin semantics to prevent eviction of actively used pages, and dirty tracking ensures modified pages are persisted to disk.</p>
+<p>The Buffer Manager is used by both user-table operations and the Catalog Manager for system catalog page I/O.</p></div></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/docs/storage-engine/database-doc"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Database Doc</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/docs/storage-engine/Developer-Guide"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Developer Guide</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#introduction-to-rookdb" class="table-of-contents__link toc-highlight">Introduction to RookDB</a></li><li><a href="#rookdb-architecture" class="table-of-contents__link toc-highlight">RookDB Architecture</a></li><li><a href="#catalog-layer" class="table-of-contents__link toc-highlight">Catalog Layer</a></li><li><a href="#table-layer" class="table-of-contents__link toc-highlight">Table Layer</a></li><li><a href="#page-layer" class="table-of-contents__link toc-highlight">Page Layer</a></li><li><a href="#buffer-manager-layer" class="table-of-contents__link toc-highlight">Buffer Manager Layer</a></li></ul></div></div></div></div></main></div></div></div></div>
 </body>
 </html>

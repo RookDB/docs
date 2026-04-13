@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="generator" content="Docusaurus v3.9.2">
 <title data-rh="true">Developer Guide | RookDB Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://rookdb.github.io/docs/img/docusaurus-social-card.jpg"><meta data-rh="true" name="twitter:image" content="https://rookdb.github.io/docs/img/docusaurus-social-card.jpg"><meta data-rh="true" property="og:url" content="https://rookdb.github.io/docs/storage-engine/Developer-Guide"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Developer Guide | RookDB Docs"><meta data-rh="true" name="description" content="Follow the instructions in the README of the RookDB/RookDB to run the Storage Engine. After the system starts, the interface will display a list of available operations to choose from."><meta data-rh="true" property="og:description" content="Follow the instructions in the README of the RookDB/RookDB to run the Storage Engine. After the system starts, the interface will display a list of available operations to choose from."><link data-rh="true" rel="canonical" href="https://rookdb.github.io/docs/storage-engine/Developer-Guide"><link data-rh="true" rel="alternate" href="https://rookdb.github.io/docs/storage-engine/Developer-Guide" hreflang="en"><link data-rh="true" rel="alternate" href="https://rookdb.github.io/docs/storage-engine/Developer-Guide" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Developer Guide","item":"https://rookdb.github.io/docs/storage-engine/Developer-Guide"}]}</script><link rel="stylesheet" href="/docs/assets/css/styles.4b065cb5.css">
-<script src="/docs/assets/js/runtime~main.7f4ac165.js" defer="defer"></script>
-<script src="/docs/assets/js/main.423ff399.js" defer="defer"></script>
+<script src="/docs/assets/js/runtime~main.e5470a4c.js" defer="defer"></script>
+<script src="/docs/assets/js/main.a5009d49.js" defer="defer"></script>
 </head>
 <body class="navigation-with-keyboard">
 <svg style="display: none;"><defs>
@@ -15,16 +15,18 @@
 <p>Follow the instructions in the README of the <a href="https://github.com/RookDB/RookDB" target="_blank" rel="noopener noreferrer" class="">RookDB/RookDB</a> to run the <code>Storage Engine</code>. After the system starts, the interface will display a list of available operations to choose from.</p>
 <p><strong>The Storage Engine currently provides the following options:</strong></p>
 <h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="show-databases">Show Databases<a href="#show-databases" class="hash-link" aria-label="Direct link to Show Databases" title="Direct link to Show Databases" translate="no">​</a></h4>
-<p>Displays all databases available in the catalog.</p>
+<p>Displays all databases available in the catalog with metadata (owner, creation timestamp).</p>
 <hr>
 <h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="create-database">Create Database<a href="#create-database" class="hash-link" aria-label="Direct link to Create Database" title="Direct link to Create Database" translate="no">​</a></h4>
-<p>Creates a new database and updates the catalog.</p>
+<p>Creates a new database with metadata and updates the catalog.</p>
 <p>Steps:</p>
 <ol>
 <li class="">Enter a database name when prompted</li>
+<li class="">Enter the owner name (or use the default)</li>
+<li class="">The database is registered in <code>pg_database</code> and the data directory is created</li>
 </ol>
 <p>Example:</p>
-<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">users</span><br></span></code></pre></div></div>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">Database name: users</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">Owner: admin</span><br></span></code></pre></div></div>
 <hr>
 <h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="select-database">Select Database<a href="#select-database" class="hash-link" aria-label="Direct link to Select Database" title="Direct link to Select Database" translate="no">​</a></h4>
 <p>Sets the active database for performing operations.</p>
@@ -34,29 +36,43 @@
 </ol>
 <hr>
 <h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="show-tables">Show Tables<a href="#show-tables" class="hash-link" aria-label="Direct link to Show Tables" title="Direct link to Show Tables" translate="no">​</a></h4>
-<p>Displays all tables in the selected database.</p>
+<p>Displays all tables in the selected database with statistics (row count, page count, creation timestamp).</p>
 <hr>
 <h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="create-table">Create Table<a href="#create-table" class="hash-link" aria-label="Direct link to Create Table" title="Direct link to Create Table" translate="no">​</a></h4>
-<p>Creates a new table with a schema.</p>
+<p>Creates a new table with a schema and optional constraints.</p>
 <p>Steps:</p>
 <ol>
 <li class="">Enter table name</li>
 <li class="">Enter columns using format:</li>
 </ol>
-<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">column_name:data_type</span><br></span></code></pre></div></div>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">column_name:data_type[:constraint]</span><br></span></code></pre></div></div>
 <ol start="3">
 <li class="">Press Enter on an empty line to finish</li>
 </ol>
 <p>Supported Types:</p>
 <ul>
-<li class="">INT</li>
-<li class="">TEXT</li>
+<li class="">INT (alias: INTEGER, INT32)</li>
+<li class="">BIGINT (alias: INT64)</li>
+<li class="">FLOAT (alias: REAL, FLOAT32)</li>
+<li class="">DOUBLE (alias: FLOAT64)</li>
+<li class="">BOOL (alias: BOOLEAN)</li>
+<li class="">TEXT (alias: STRING)</li>
+<li class="">VARCHAR(n)</li>
+<li class="">DATE</li>
+<li class="">TIMESTAMP</li>
+<li class="">BYTES (alias: BYTEA, BLOB)</li>
+</ul>
+<p>Supported Inline Constraints:</p>
+<ul>
+<li class=""><code>PRIMARY KEY</code> — unique, not-null constraint with a backing B-Tree index</li>
+<li class=""><code>NOT NULL</code> — disallows NULL values</li>
 </ul>
 <p>Example:</p>
-<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">id:INT</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">name:TEXT</span><br></span></code></pre></div></div>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">id:INT:PRIMARY KEY</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">name:TEXT:NOT NULL</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">email:VARCHAR(100)</span><br></span></code></pre></div></div>
+<p>After defining columns, you can also define table-level constraints such as composite primary keys and foreign keys.</p>
 <hr>
 <h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="load-csv">Load CSV<a href="#load-csv" class="hash-link" aria-label="Direct link to Load CSV" title="Direct link to Load CSV" translate="no">​</a></h4>
-<p>Loads CSV data into an existing table.</p>
+<p>Loads CSV data into an existing table. Constraint validation is performed during loading — rows that violate PRIMARY KEY, UNIQUE, FOREIGN KEY, or NOT NULL constraints are rejected.</p>
 <p>Steps:</p>
 <ol>
 <li class="">Enter table name</li>
