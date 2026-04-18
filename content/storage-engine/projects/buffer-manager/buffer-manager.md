@@ -11,7 +11,7 @@ The **Buffer Pool** is responsible for managing in-memory pages for multiple tab
 It supports:
 - Multi-file page management
 - Page caching (hit/miss handling)
-- Replacement policies (LRU, Clock, etc.)
+- Replacement policies (LRU, Clock)
 - Dirty page handling and flushing
 - Reserved memory region for catalog pages
 
