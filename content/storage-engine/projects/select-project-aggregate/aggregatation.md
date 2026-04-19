@@ -12,7 +12,7 @@ RookDB relies on a Volcano-style iterator model utilizing a **Hash-Based Aggrega
 ```mermaid
 graph TD
     Client[CLI / Frontend] --> Agg[Aggregation Executor Node]
-    Agg -->|pulls via next()| Scan[Sequential Scan Node]
+    Agg -->|pulls via next| Scan[Sequential Scan Node]
     Scan --> Buff[Buffer Manager]
     Buff --> Disk[(Disk Pages)]
 ```
@@ -35,7 +35,7 @@ To optimize the extraction of attributes required for aggregation, the internal 
 ## 4. Algorithms Used
 
 ### Hash-Based Grouping
-Utilizes hashing over an array of `Value` primitives. The engine maps tuple keys to aggregation buckets dynamically in a single $O(N)$ pass, bypassing the need for pre-sorting the dataset.
+Utilizes hashing over an array of `Value` primitives. The engine maps tuple keys to aggregation buckets dynamically in a single `O(N)` pass, bypassing the need for pre-sorting the dataset.
 
 ### Welford's Algorithm (Variance & Standard Deviation)
 Selected to prevent catastrophic cancellation intrinsic to standard variance floating-point summations.
