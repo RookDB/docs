@@ -43,13 +43,16 @@ The Buffer Manager is implemented as a **Buffer Pool**, which is:
 
 ---
 
-## Core Structure (Conceptual)
+## Core Structure
 
 ```rust
 struct BufferPool {
-    frames: Vec<Frame>,
-    page_table: HashMap<PageId, FrameId>,
-    policy: ReplacementPolicy,
+    pub frames: Vec<BufferFrame>,
+    pub page_table: HashMap<PageId, usize>,
+    pub files: HashMap<String, File>, 
+    pub num_frames: usize,
+    pub policy: Box<dyn ReplacementPolicy>,
+    pub stats: BufferStats,
 }
 ```
 
@@ -81,11 +84,12 @@ Each frame represents a **slot in memory**.
 +----------------------------------+
 | Page Data (8 KB)                 |
 +----------------------------------+
-| Metadata                         |
-|----------------------------------|
+| Frame Metadata :                 |
 | page_id                          |
 | pin_count                        |
-| dirty_flag                       |
+| dirty                            |
+| usage_count                      |
+| last_used                        |
 +----------------------------------+
 ```
 
@@ -396,20 +400,19 @@ General Zone  → flexibility
 
 # 14. Architectural Summary
 
-```text
-                BUFFER MANAGER
-
-        +-----------------------------------+
-        |           Buffer Pool             |
-        |-----------------------------------|
-        | Reserved Frames (System)          |
-        |-----------------------------------|
-        | General Frames (User Data)        |
-        |-----------------------------------|
-        | Replacement Policy                |
-        |-----------------------------------|
-        | Page Table                        |
-        +-----------------------------------+
+```
+┌─────────────────────────────────────────────────────┐
+│               Buffer Pool (Total)                   │
+│           128 MB (configurable size)                │
+├─────────────────────────────────────────────────────┤
+│  Reserved Region │ Data Region                      │
+│  (Frames 0-128)  │ (Frames 129+)                    │
+│  [Catalog Pages] │ [Table Pages - Managed by Policy]│
+├─────────────────────────────────────────────────────┤
+│ Page | Page | Page | ... | Page | Page | ... | Page │
+├─────────────────────────────────────────────────────┤
+│  8KB   8KB    8KB          8KB    8KB         8KB   │
+└─────────────────────────────────────────────────────┘
 ```
 
 ---

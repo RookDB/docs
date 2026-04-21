@@ -1,346 +1,409 @@
 ---
-title: Buffer Manager
-sidebar_position: 3
+title: Buffer Manager Overview
+sidebar_position: 1
 ---
 
-# Buffer Manager
+# Buffer Manager - Complete Overview & Guide
 
+## Introduction
 
-The **Buffer Pool** is responsible for managing in-memory pages for multiple tables (files). It acts as an abstraction layer between disk storage and higher-level components such as the catalog and table manager.
+The **Buffer Manager** is a critical component of RookDB's storage subsystem that manages in-memory caching of database pages. It sits between the execution layer and disk storage, significantly reducing I/O operations by maintaining a pool of frequently accessed pages in memory.
 
-It supports:
-- Multi-file page management
-- Page caching (hit/miss handling)
-- Replacement policies (LRU, Clock)
-- Dirty page handling and flushing
-- Reserved memory region for catalog pages
+### What It Does
 
----
-
-# Core Concepts
-
-- **PageId** → uniquely identifies a page:
-  (table_name, page_number)
-
-- **Frames** → fixed-size memory slots storing pages
-
-- **Reserved Frames (0–127)** → used for catalog pages (never evicted)
-
-- **Data Frames (128+)** → used for table data (managed by replacement policy)
+- **Reduces Disk I/O**: Keeps frequently accessed pages in memory rather than repeatedly reading from disk
+- **Manages Limited Memory**: Intelligently evicts pages when buffer is full using pluggable replacement policies
+- **Ensures Correctness**: Tracks page modifications (dirty flag) and ensures they're written to disk
+- **Multi-Table Support**: Handles pages from multiple database table files simultaneously
+- **Measures Performance**: Tracks cache hits/misses to monitor buffer effectiveness
 
 ---
 
-# Exposed APIs
+## Architecture at a Glance
 
----
+```
+┌─────────────────────────────────────┐
+│   Query Layer / Execution Engine    │
+└──────────────┬──────────────────────┘
+               │ fetch_page / unpin_page
+               │
+┌──────────────▼──────────────────────┐
+│      Buffer Manager                 │ ◄─ This Component
+│   (Caching + Replacement Policy)    │
+└──────────────┬──────────────────────┘
+               │ read_page / write_page
+               │
+┌──────────────▼──────────────────────┐
+│        Disk Manager                 │
+│   (Page Read/Write Operations)      │
+└─────────────────────────────────────┘
+```
+### High-Level Architecture
 
-## 1. fetch_page
+The Buffer Manager implements a **Buffer Pool**—a fixed-size array of memory frames where each frame holds one database page.
 
-```rust
-pub fn fetch_page(
-    &mut self,
-    table_name: String,
-    page_number: u32,
-) -> io::Result<&mut Page>
+```
+┌─────────────────────────────────────────────────────┐
+│               Buffer Pool (Total)                   │
+│           128 MB (configurable size)                │
+├─────────────────────────────────────────────────────┤
+│  Reserved Region │ Data Region                      │
+│  (Frames 0-128)  │ (Frames 129+)                    │
+│  [Catalog Pages] │ [Table Pages - Managed by Policy]│
+├─────────────────────────────────────────────────────┤
+│ Page | Page | Page | ... | Page | Page | ... | Page │
+├─────────────────────────────────────────────────────┤
+│  8KB   8KB    8KB          8KB    8KB         8KB   │
+└─────────────────────────────────────────────────────┘
 ```
 
-### Description
-Fetches a page from the buffer pool. If the page is not present, it is loaded from disk.
+### Key Concept: Pinning
 
-### Inputs
+Pages are managed using a **pin count** mechanism:
 
-| Parameter | Type | Description |
-|----------|------|-------------|
-| table_name | String | Name of the table (file) |
-| page_number | u32 | Page number to fetch |
-
-### Output
-
-| Return Type | Description |
-|------------|-------------|
-| Ok(&mut Page) | Mutable reference to the page |
-| Err(io::Error) | If page cannot be loaded |
-
-### Behavior
-
-1. Buffer Hit
-   - Page found in page_table
-   - Increments pin_count and usage_count
-   - Updates replacement policy (if not reserved)
-
-2. Buffer Miss
-   - Searches for free frame
-   - If none, evicts a victim frame
-   - Flushes dirty page if needed
-
-3. Disk Load
-   - Reads page from correct file using table_name
-   - Inserts into buffer and updates metadata
-
-### Notes
-- Requires file to be registered in self.files
-- Reserved frames are never evicted
-
----
-
-## 2. unpin_page
-
-```rust
-pub fn unpin_page(
-    &mut self,
-    page_id: &PageId,
-    is_dirty: bool,
-) -> io::Result<()>
+```
+fetch_page()   → pin_count = 1 (page locked in buffer)
+fetch_page()   → pin_count = 2 (same page, multiple users)
+unpin_page()   → pin_count = 1 (one user done)
+unpin_page()   → pin_count = 0 (eligible for eviction)
 ```
 
-### Description
-Releases a previously pinned page and optionally marks it as dirty.
-
-### Inputs
-
-| Parameter | Type | Description |
-|----------|------|-------------|
-| page_id | &PageId | Page identifier |
-| is_dirty | bool | Whether the page was modified |
-
-### Output
-
-| Return Type | Description |
-|------------|-------------|
-| Ok(()) | Success |
-| Err(io::Error) | If page not found or already unpinned |
-
-### Behavior
-
-- Decrements pin_count
-- Marks page as dirty if is_dirty = true
-
-### Notes
-- Page cannot be evicted while pinned
+Only frames with `pin_count = 0` can be evicted when space is needed.
 
 ---
 
-## 3. flush_page
+## Key Concepts
 
-```rust
-pub fn flush_page(&mut self, page_id: &PageId) -> io::Result<()>
+| Concept | Explanation |
+|---------|-------------|
+| **PageId** | Unique identifier: (table_name, page_number) |
+| **Frame** | Fixed-size memory slot (8 KB) holding one page |
+| **Reserved Frames** | Frames 0-128 for catalog pages (never evicted) |
+| **Data Frames** | Frames 129+ for table data (managed by replacement policy) |
+| **Dirty Page** | Page that has been modified in memory but not flushed to disk |
+| **Pin Count** | Number of active users holding a page; >0 means cannot evict |
+| **Replacement Policy** | Algorithm that chooses which page to evict (Clock/LRU/LRU-K) |
+
+---
+
+## Documentation Structure
+
+This folder contains specialized documentation for different aspects:
+
+### Core References
+
+| Document | Contents | When to Read |
+|----------|----------|--------------|
+| **[API Reference](./api-reference.md)** | Complete method signatures and behavior | You need to call a specific method |
+| **[Data Structures](./data-structures.md)** | Definition of PageId, FrameMetadata, BufferFrame, etc. | Understanding internal types |
+| **[Architecture](./architecture.md)** | System design, frame layout, reservation strategy | How components fit together |
+| **[Replacement Policies](./replacement_policies.md)** | Detailed Clock, LRU, and LRU-K algorithms | Choosing/tuning eviction strategy |
+
+### Quick Navigation
+
+**I want to...**
+- **Call a method** → See [API Reference](./api-reference.md)
+- **Understand a data structure** → See [Data Structures](./data-structures.md)
+- **Learn how it works internally** → See [Architecture](./architecture.md)
+- **Choose a replacement policy** → See [Replacement Policies](./replacement-policies.md)
+- **Get an Overview** → Keep reading this document
+
+---
+
+## System Design Overview
+
+The buffer manager divides the buffer pool into two regions:
+
+### Reserved Region (Frames 0-128)
+
+```
+┌────────────────────────────────┐
+│ RESERVED FRAMES (0-128)        │
+│ System Catalog Pages           │
+├────────────────────────────────┤
+│ pg_database | pg_table         │
+│ pg_column | pg_constraint      │
+│ pg_index | pg_type             │
+└────────────────────────────────┘
 ```
 
-### Description
-Writes a dirty page from buffer to disk.
+**Purpose**: Store system catalog metadata that must always be accessible
+- Catalog is required for every query (table lookups, schema checks)
+- Never evicted, always available
+- Takes up ~1 MB of the buffer
 
-### Inputs
+### Data Region (Frames 129+)
 
-| Parameter | Type | Description |
-|----------|------|-------------|
-| page_id | &PageId | Page to flush |
-
-### Output
-
-| Return Type | Description |
-|------------|-------------|
-| Ok(()) | Success |
-| Err(io::Error) | If page not found |
-
-### Behavior
-
-- Writes page to correct file using table_name
-- Clears dirty flag
-- Updates stats
-
----
-
-## 4. flush_all_pages
-
-```rust
-pub fn flush_all_pages(&mut self) -> io::Result<()>
+```
+┌────────────────────────────────┐
+│ DATA FRAMES (129+)             │
+│ User Table Pages               │
+├────────────────────────────────┤
+│ Table Data Pages (Managed by   │
+│ Replacement Policy)            │
+└────────────────────────────────┘
 ```
 
-### Description
-Flushes all dirty pages in the buffer pool to disk.
-
-### Inputs
-None
-
-### Output
-
-| Return Type | Description |
-|------------|-------------|
-| Ok(()) | Success |
-| Err(io::Error) | On write failure |
-
-### Behavior
-
-- Iterates over all frames
-- Writes all dirty pages to disk
+**Purpose**: Cache actual table data
+- Subject to eviction when new pages needed
+- Replacement policy decides which pages to evict
+- Takes up ~127 MB of the buffer
 
 ---
 
-## 5. new_page
+## Typical Workflow
 
-```rust
-pub fn new_page(
-    &mut self,
-    table_name: String,
-) -> io::Result<(PageId, &mut Page)>
+```
+1. INITIALIZATION
+   ├─ Create BufferPool with chosen replacement policy
+   └─ Register all table files: buffer.register_file("users")?
+
+2. DURING QUERY EXECUTION
+   ├─ fetch_page("users", 0)?  ← Get page from buffer
+   ├─   [Buffer Hit]            ← Already in memory
+   ├─     OR
+   ├─   [Buffer Miss]           ← Read from disk
+   │     ├─ Find free frame (or evict if needed)
+   │     └─ Read from disk, place in frame
+   │
+   ├─ Modify page data
+   └─ unpin_page(&page_id, is_dirty)?  ← Release page
+
+3. ON SHUTDOWN
+   └─ flush_all()?  ← Write all dirty pages to disk
+
 ```
 
-### Description
-Creates a new page in a table file and loads it into the buffer.
-
-### Inputs
-
-| Parameter | Type | Description |
-|----------|------|-------------|
-| table_name | String | Target table |
-
-### Output
-
-| Return Type | Description |
-|------------|-------------|
-| (PageId, &mut Page) | New page identifier and reference |
-| Err(io::Error) | If creation fails |
-
-### Behavior
-
-1. Calls create_page() on disk  
-2. Fetches new page into buffer  
-3. Marks page as dirty  
-
 ---
 
-## 6. delete_page
+## Configuration
+
+The buffer manager is configured via constants in `mod.rs`:
 
 ```rust
-pub fn delete_page(&mut self, page_id: &PageId) -> io::Result<()>
+pub const PAGE_SIZE: usize = 8192;              // 8 KB per page
+pub const BUFFER_SIZE: usize = 128 * 1024 * 1024; // 128 MB total
+pub const RESERVED_FRAMES: usize = 129;        // Frames 0-128 reserved
 ```
 
-### Description
-Removes a page from the buffer pool.
+### Implications
 
-### Inputs
+```
+Total Frames   = 128 MB / 8 KB = 16,384 frames
+Reserved       = 129 frames (~1 MB)
+Data Frames    = 16,255 frames (~127 MB)
+```
 
-| Parameter | Type | Description |
-|----------|------|-------------|
-| page_id | &PageId | Page to delete |
-
-### Output
-
-| Return Type | Description |
-|------------|-------------|
-| Ok(()) | Success |
-| Err(io::Error) | If page is pinned |
-
-### Behavior
-
-- Removes mapping from page_table  
-- Clears frame metadata  
-
-### Notes
-- Does not delete from disk  
+To adjust for your workload:
+- **More hot data?** Increase `BUFFER_SIZE`
+- **More concurrent queries?** May need larger buffer for pin count headroom
+- **Smaller buffer?** Decrease `BUFFER_SIZE` (minimum should fit catalog + working set)
 
 ---
 
-## 7. reset
+## Choosing a Replacement Policy
+
+Three policies are available. Pick based on your workload:
+
+### Clock Policy
+- **Best for**: General workloads, sequential access
+- **Memory overhead**: Minimal
+- **Speed**: Very fast
+- **When**: Unsure, or memory-constrained
+
+### LRU Policy
+- **Best for**: Working set fits in buffer, strong temporal locality
+- **Memory overhead**: Moderate (timestamps per frame)
+- **Speed**: Medium
+- **When**: Good hit ratios expected, memory available
+
+### LRU-K Policy
+- **Best for**: Mixed hot/cold access patterns, cache pollution resistance
+- **Memory overhead**: High (K timestamps per frame)
+- **Speed**: Slower
+- **When**: Need sophisticated eviction behavior
+
+See [Replacement Policies](./replacement-policies.md) for detailed comparison.
+
+---
+
+## Integration Points
+
+### Reading Pages
 
 ```rust
-pub fn reset(&mut self)
+// Fetch a page from the buffer (may load from disk)
+let page = buffer.fetch_page("users".to_string(), 0)?;
+
+// Use the page
+
+// Release the page
+buffer.unpin_page(&page_id, false)?;  // Not modified
 ```
 
-### Description
-Clears the entire buffer pool state.
-
-### Behavior
-
-- Clears all frames  
-- Clears page_table  
-- Clears files  
-- Resets statistics  
-
----
-
-## 8. preload_database
+### Writing Pages
 
 ```rust
-pub fn preload_database(&mut self, db_name: &str) -> io::Result<()>
+// Fetch page
+let mut page = buffer.fetch_page("users".to_string(), 0)?;
+
+// Modify page
+
+// Release as dirty
+buffer.unpin_page(&page_id, true)?;  // Mark for flush
 ```
 
-### Description
-Loads all table pages of a database into the buffer pool.
-
-### Inputs
-
-| Parameter | Type | Description |
-|----------|------|-------------|
-| db_name | &str | Database name |
-
-### Output
-
-| Return Type | Description |
-|------------|-------------|
-| Ok(()) | Success |
-| Err(io::Error) | On failure |
-
-### Behavior
-
-- Resets buffer pool  
-- Iterates over all table files  
-- Loads pages starting from frame 128  
-- Stops when buffer is full  
-
----
-
-## 9. preload_catalog_pages
+### Creating Pages
 
 ```rust
-pub fn preload_catalog_pages(&mut self) -> io::Result<()>
+// Create a new page in a table
+let (page_id, page) = buffer.new_page("users".to_string())?;
+
+// Populate page
+// ...
+
+// Mark as dirty (will be flushed)
+buffer.unpin_page(&page_id, true)?;
 ```
 
-### Description
-Loads the first two pages of each system catalog file into reserved frames.
-
-### Behavior
-
-- Opens catalog files:
-  - pg_database
-  - pg_table
-  - pg_column
-  - pg_constraint
-  - pg_index
-  - pg_type  
-- Loads pages 0 and 1  
-- Stores them in reserved frames (0–127)  
-- Registers files in self.files  
-
-### Notes
-
-- These pages are:
-  - Never evicted  
-  - Not part of replacement policy  
-
 ---
 
-# Summary
+## Error Handling Guide
 
-The Buffer Pool now supports:
-
-- Multi-file page management  
-- Page-level caching  
-- Catalog + data separation  
-- Replacement policies  
-- Dirty page handling  
-- Preloading strategies  
-
----
-
-# Example Usage
+### Common Errors and Fixes
 
 ```rust
-let mut bp = BufferPool::new(Box::new(LRU::new()));
 
-bp.preload_catalog_pages()?;      // load system catalogs
-bp.preload_database("users")?;    // load table data
+// Error: "All frames are pinned"
+// → Cause: Pin count leak (fetch without unpin)
+// → Fix: Ensure every fetch_page has matching unpin_page
 
-let page = bp.fetch_page("students".to_string(), 1)?;
-bp.unpin_page(&PageId { table_name: "students".into(), page_number: 1 }, false)?;
+// Error: Double unpin
+// → Cause: unpin called twice on same page
+// → Fix: Track pin count, unpin only once per fetch
 ```
+
+### Pin Count Correctness
+
+**Critical**: Every `fetch_page()` must have matching `unpin_page()`:
+
+```rust
+// CORRECT
+let page = buffer.fetch_page("users", 0)?;  // +1
+buffer.unpin_page(&page_id, true)?;         // -1
+
+// INCORRECT (Leak)
+let page = buffer.fetch_page("users", 0)?;  // +1
+// ... forgot to unpin ...
+// page stays pinned forever!
+
+// INCORRECT (Double fetch)
+let page = buffer.fetch_page("users", 0)?;  // +1
+let page2 = buffer.fetch_page("users", 0)?; // +2 (same page)
+buffer.unpin_page(&page_id, true)?;         // -1 (still pinned!)
+```
+
+---
+
+## Performance Monitoring
+
+### Key Metrics
+
+```rust
+// Get statistics
+let stats = &buffer.stats;
+
+// Hit ratio (0.0 to 1.0, higher is better)
+let hit_ratio = stats.hit_ratio();
+
+// Counts
+println!("Hits: {}", stats.hit_count);
+println!("Misses: {}", stats.miss_count);
+println!("Evictions: {}", stats.eviction_count);
+println!("Dirty flushes: {}", stats.dirty_flush_count);
+```
+
+### Healthy vs Unhealthy
+
+| Metric | Healthy | Problem |
+|--------|---------|---------|
+| Hit Ratio | > 80% | < 50% (buffer too small?) |
+| Evictions | Proportional to workload | Very high (working set > buffer?) |
+| Dirty Flushes | Matches write operations | Unexpected patterns? |
+
+### Tuning Based on Metrics
+
+```
+IF hit_ratio < 50%:
+  → Increase BUFFER_SIZE
+  → Try LRU instead of Clock
+  → Check if working set fits
+
+IF eviction_count is very high:
+  → Increase BUFFER_SIZE
+  → Try LRU-K for better selectivity
+
+IF pin_count errors:
+  → Check for fetch/unpin mismatches
+  → Reduce concurrent queries
+  → Increase BUFFER_SIZE for headroom
+```
+
+---
+
+## Dirty Page Management
+
+Pages are marked dirty when modified and flushed to disk during eviction or explicit flush:
+
+### Marking Pages
+
+```rust
+// Mark page as modified
+buffer.unpin_page(&page_id, true)?;  // is_dirty = true
+```
+
+### Automatic Flushing
+
+```
+When evicting a frame:
+  IF frame.metadata.dirty:
+    → Write page to disk
+    → Clear dirty flag
+    → Update statistics
+  THEN:
+    → Reuse frame for new page
+```
+
+### Explicit Flushing
+
+```rust
+// Flush single page
+buffer.flush_page(&page_id)?;
+
+// Flush all dirty pages
+buffer.flush_all()?;
+```
+
+**When to flush explicitly**:
+- Before shutdown (ensure durability)
+- After transaction commit
+- Before checkpoints
+- Before backup operations
+
+---
+
+## Summary
+
+The Buffer Manager:
+- Caches pages in memory to reduce disk I/O
+- Manages memory via pluggable replacement policies
+- Handles multiple table files
+- Ensures data durability with dirty tracking
+- Provides pin-based concurrency control
+- Tracks performance with comprehensive statistics
+
+Use it correctly by:
+- Pinning/unpinning properly
+- Marking modifications
+- Choosing appropriate policies
+- Monitoring performance
