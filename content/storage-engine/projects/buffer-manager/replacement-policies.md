@@ -1,3 +1,8 @@
+---
+title: Replacement Policies
+sidebar_position: 1
+---
+
 # Buffer Manager Replacement Policies
 
 ## Overview

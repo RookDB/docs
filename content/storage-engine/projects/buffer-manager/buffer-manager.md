@@ -97,7 +97,7 @@ This folder contains specialized documentation for different aspects:
 | **[API Reference](./api-reference.md)** | Complete method signatures and behavior | You need to call a specific method |
 | **[Data Structures](./data-structures.md)** | Definition of PageId, FrameMetadata, BufferFrame, etc. | Understanding internal types |
 | **[Architecture](./architecture.md)** | System design, frame layout, reservation strategy | How components fit together |
-| **[Replacement Policies](./replacement_policies.md)** | Detailed Clock, LRU, and LRU-K algorithms | Choosing/tuning eviction strategy |
+| **[Replacement Policies](./replacement-policies.md)** | Detailed Clock, LRU, and LRU-K algorithms | Choosing/tuning eviction strategy |
 
 ### Quick Navigation
 
@@ -105,7 +105,8 @@ This folder contains specialized documentation for different aspects:
 - **Call a method** → See [API Reference](./api-reference.md)
 - **Understand a data structure** → See [Data Structures](./data-structures.md)
 - **Learn how it works internally** → See [Architecture](./architecture.md)
-- **Choose a replacement policy** → See [Replacement Policies](./replacement-policies.md)
+- **Choose a replacement policy** → See 
+[Replacement Policies](./replacement-policies.md)
 - **Get an Overview** → Keep reading this document
 
 ---
@@ -156,7 +157,7 @@ The buffer manager divides the buffer pool into two regions:
 ```
 1. INITIALIZATION
    ├─ Create BufferPool with chosen replacement policy
-   └─ Register all table files: buffer.register_file("users")?
+   └─ Register all table files
 
 2. DURING QUERY EXECUTION
    ├─ fetch_page("users", 0)?  ← Get page from buffer

@@ -1,3 +1,8 @@
+---
+title: Architecture
+sidebar_position: 1
+---
+
 # Buffer Manager Architecture (RookDB)
 
 This document provides a **detailed architectural overview** of the Buffer Manager in RookDB.
@@ -20,8 +25,6 @@ The Buffer Manager is part of the **Storage Manager Layer**, positioned between:
         Query Layer / Execution Engine
                       ↓
               Buffer Manager
-                      ↓
-                Page Layer
                       ↓
                  Disk Storage
 ```
@@ -421,7 +424,7 @@ General Zone  → flexibility
 
 The Buffer Manager:
 
-- Sits above the Page Layer
+- Sits below the Query Layer / Execution Engine Layer
 - Manages in-memory caching
 - Reduces disk access overhead
 

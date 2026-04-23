@@ -1,3 +1,8 @@
+---
+title: Data Structures
+sidebar_position: 1
+---
+
 # Buffer Manager Data Structures
 
 This document describes the key data structures used in the Buffer Manager component of RookDB.

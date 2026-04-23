@@ -1,5 +1,5 @@
 ---
-title: Buffer Manager
+title: Api Reference
 sidebar_position: 3
 ---
 
