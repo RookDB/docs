@@ -115,7 +115,7 @@ The projection operator handles all SELECT-level transformations in RookDB queri
 - Column selection (arbitrary subset of table columns)
 - Column reordering to match SELECT clause order
 - WHERE clause filtering with expression tree evaluation
-- DISTINCT deduplication using hash-based approach
+- DISTINCT deduplication using hash-based approach (O(n) space)
 - Variable-length string handling up to 65 KB
 - NULL value propagation and type casting
 - Complex expression evaluation (arithmetic, boolean, comparison)
@@ -348,18 +348,16 @@ These target the entire projection pipeline (not just reordering), ordered by im
 | 1 | I/O Read-Ahead Buffering | +17% | 2 hrs | Read 8 pages at once instead of 1 |
 | 2 | Column Pruning | +18% | 3 hrs | Load only requested columns from disk |
 | 3 | Parallelization (8 threads) | **+4.2x** | 5 hrs | Work-stealing across CPU cores |
-| 4 | SIMD Vectorization | +10% | 6 hrs | Process 8 WHERE rows per clock cycle |
-| 5 | JIT WHERE Compilation | +3% | 8 hrs | Generate native code per predicate |
-| 6 | Result Caching | +30% | 4 hrs | Cache repeated identical query results |
+| 4 | Result Caching | +30% | 4 hrs | Cache repeated identical query results |
 
-**Expected cumulative gains:**
+<!-- **Expected cumulative gains:**
 
 | Phase | Throughput | Gain vs Today |
 |---|---|---|
 | Baseline (today) | 900K rows/sec | — |
 | After Phase 1–2 | 1.2M rows/sec | +33% |
 | After Phase 1–4 | 5–6M rows/sec | +550% |
-| Full roadmap | 8–15M rows/sec | +1,600% |
+| Full roadmap | 8–15M rows/sec | +1,600% | -->
 
 ### 5.5 Hardware-Specific Batch Size Guidance
 
@@ -413,16 +411,35 @@ let reorder = ColumnReorderSpec::by_indices_and_names(
 );
 ```
 
-#### WHERE Clause Filtering
+#### Complex Expression Evaluation
 
 ```rust
-// SQL: SELECT name FROM employees WHERE salary > 50000
-let where_pred = Expr::Gt(
-    Box::new(Expr::Column(2)),
-    Box::new(Expr::Const(Value::Int(50000)))
+// Arithmetic expressions
+let expr = Expr::Add(
+    Box::new(Expr::Mul(
+        Box::new(Expr::Column(0)),  // salary
+        Box::new(Expr::Const(Value::Float(1.1)))  // 10% bonus
+    )),
+    Box::new(Expr::Column(1))  // base_salary
 );
-let input = ProjectionInput { predicate: Some(where_pred), .. };
-let result = ProjectionEngine::execute_simple(input)?;
+
+// Boolean expressions with short-circuit evaluation
+let complex_pred = Expr::And(
+    Box::new(Expr::Gt(
+        Box::new(Expr::Column(2)),  // age
+        Box::new(Expr::Const(Value::Int(18)))
+    )),
+    Box::new(Expr::Or(
+        Box::new(Expr::Eq(
+            Box::new(Expr::Column(3)),  // department
+            Box::new(Expr::Const(Value::String("Engineering".to_string())))
+        )),
+        Box::new(Expr::Like(
+            Box::new(Expr::Column(4)),  // title
+            Box::new(Expr::Const(Value::String("%Manager%".to_string())))
+        ))
+    ))
+);
 ```
 
 #### DISTINCT Deduplication
@@ -438,14 +455,83 @@ let input = ProjectionInput {
 };
 ```
 
-#### Error Tracking
+#### Variable-Length String Handling
 
 ```rust
-let filter = FilterConfig::new(Some(predicate))
-    .with_error_tracking(100);   // stop after 100 errors
+// Strings up to 65 KB supported automatically
+// No configuration required — handles VARCHAR(MAX) equivalent
+let long_string = "A".repeat(65000);
+let result = ProjectionEngine::execute_simple(input_with_long_strings)?;
+```
 
+#### NULL Propagation & Type Casting
+
+```rust
+// NULL values propagate through expressions
+// Automatic type casting for compatible types
+let expr = Expr::Add(
+    Box::new(Expr::Column(0)),  // INT column
+    Box::new(Expr::Const(Value::Null))  // NULL
+);
+// Result: NULL (propagates through addition)
+
+let cast_expr = Expr::Cast(
+    Box::new(Expr::Column(0)),  // INT column
+    DataType::Float            // Cast to FLOAT
+);
+```
+
+#### Set Operations
+
+```rust
+// UNION ALL (preserves duplicates)
+let union_result = ProjectionEngine::union_all(&left_result, &right_result)?;
+
+// UNION (removes duplicates)
+let union_result = ProjectionEngine::union(&left_result, &right_result)?;
+
+// INTERSECT
+let intersect_result = ProjectionEngine::intersect(&left_result, &right_result)?;
+
+// EXCEPT (MINUS)
+let except_result = ProjectionEngine::except(&left_result, &right_result)?;
+```
+
+#### Common Table Expression (CTE) Integration
+
+```rust
+// WITH clause support for recursive queries
+let cte = CommonTableExpression {
+    name: "employee_hierarchy".to_string(),
+    columns: vec!["id".to_string(), "name".to_string(), "manager_id".to_string()],
+    query: recursive_query,
+};
+
+let input = ProjectionInput {
+    cte: Some(cte),
+    ..Default::default()
+};
+let result = ProjectionEngine::execute_with_cte(input)?;
+```
+
+#### Per-Row Error Diagnostics
+
+```rust
 let result = ProjectionEngine::execute(input, None, Some(filter))?;
-println!("Errors: {}", result.errors.len());
+
+// Access detailed error information per row
+for error in &result.errors {
+    println!("Row {}: {} - {}", error.row_index, error.error_type, error.message);
+    if let Some(context) = &error.context {
+        println!("  Context: {}", context);
+    }
+}
+
+// Errors include:
+// - Type conversion failures
+// - NULL constraint violations
+// - Expression evaluation errors
+// - Memory allocation issues
 ```
 
 #### Status Handling
@@ -737,16 +823,159 @@ if metrics.elapsed_ms > 5000 {
 
 ### 8.3 Integration Checklist
 
-- [done ] Add `num_cpus` to `Cargo.toml` (for CPU core detection)
-- [done ] Add `rayon` to `Cargo.toml` (for parallel strategy)
-- [ done] Import `projection_optimized` and `projection_enhanced` modules
-- [ done] Replace `reorder_columns()` calls with `reorder_optimized()`
-- [ done] Run `cargo test` — verify all 118 tests pass
-- [ done] Run `StrategyBenchmark::compare_strategies()` on target hardware
-- [ done] Set `available_ram_mb` and `num_workers` based on benchmark results
-- [ done] Add `metrics.print()` logging to production query paths
-- [ done] Test with representative datasets: 1M, 100M, 1B rows
-- [ done] Monitor metrics in production and alert on regressions
+- [done] Add `num_cpus` to `Cargo.toml` (for CPU core detection)
+- [done] Add `rayon` to `Cargo.toml` (for parallel strategy)
+- [done] Import `projection_optimized` and `projection_enhanced` modules
+- [done] Replace `reorder_columns()` calls with `reorder_optimized()`
+- [done] Run `cargo test` — verify all 118 tests pass
+- [done] Run `StrategyBenchmark::compare_strategies()` on target hardware
+- [done] Set `available_ram_mb` and `num_workers` based on benchmark results
+- [done] Add `metrics.print()` logging to production query paths
+- [done] Test with representative datasets: 1M, 100M, 1B rows
+- [done] Monitor metrics in production and alert on regressions
+
+# Database CLI Commands Documentation
+
+## 📦 Database & Table Operations
+
+### 1. Show Databases
+
+Displays a list of all available databases.
+
+### 2. Create Database
+
+Creates a new database with a specified name.
+
+### 3. Select Database
+
+Switches the current working database.
+
+### 4. Show Tables
+
+Lists all tables in the selected database.
+
+### 5. Create Table
+
+Creates a new table with defined schema (columns and types).
+
+### 6. Show Table Statistics
+
+Displays metadata such as row count, size, and structure details.
+
+---
+
+## 📊 Data Operations
+
+### 7. Load CSV
+
+Imports data from a CSV file into a table.
+
+---
+
+## 🔍 Query Operations (In-Memory)
+
+### 8. SELECT *
+
+Retrieves all rows and columns from a table.
+
+### 9. SELECT * WHERE ...
+
+Filters rows based on a condition.
+
+### 10. SELECT columns / expressions
+
+Retrieves specific columns or computed expressions.
+
+### 11. SELECT DISTINCT
+
+Returns unique rows by removing duplicates.
+
+### 12. COUNT rows (with optional WHERE)
+
+Counts total rows, optionally filtered by a condition.
+
+---
+
+## 🔗 Set Operations
+
+### 13. UNION two tables
+
+Combines rows from two tables, removing duplicates.
+
+### 14. INTERSECT two tables
+
+Returns rows common to both tables.
+
+### 15. EXCEPT two tables
+
+Returns rows from the first table not present in the second.
+
+---
+
+## 🌊 Streaming Operations (Constant RAM)
+
+### 16. STREAM SELECT * WHERE ...
+
+Streams filtered rows without loading entire data into memory.
+
+### 17. STREAM PROJECT columns WHERE ...
+
+Streams selected columns with filtering applied.
+
+### 18. STREAM COUNT WHERE ...
+
+Counts rows using streaming (memory-efficient).
+
+### 19. STREAM SELECT DISTINCT (dedup scan)
+
+Finds unique rows using a streaming approach.
+
+---
+
+## ♻️ Duplicate Handling
+
+### 20. Find & report duplicate tuples
+
+Identifies duplicate records in a table.
+
+### 21. Export deduped table (no dups)
+
+Creates a new table/file without duplicates.
+
+### 22. Export duplicates-only file
+
+Exports only the duplicate records.
+
+### 23. Show duplicate index (.dup file)
+
+Displays index or reference file containing duplicate locations.
+
+---
+
+## ⚡ Optimized Projection
+
+### 24. SELECT with optimized column reorder
+
+Reorders columns internally for improved query performance.
+
+---
+
+## 🚪 Exit
+
+### 0. Exit
+
+Closes the program.
+
+---
+
+## 📝 Notes
+
+* "Streaming" operations are designed for large datasets and use constant memory.
+* "Set operations" require compatible schemas between tables.
+* Duplicate handling features help maintain data integrity and cleanliness.
+
+---
+
 
 ---
 
