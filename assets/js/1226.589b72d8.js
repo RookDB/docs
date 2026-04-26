@@ -1,0 +1,1 @@
+"use strict";(globalThis.webpackChunkrook_db=globalThis.webpackChunkrook_db||[]).push([[1226],{1226(e,o,a){a.d(o,{createInfoServices:()=>b.v});var b=a(3954);a(2519)}}]);
