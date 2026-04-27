@@ -1,309 +1,449 @@
 # API Doc
 
 ## Index of APIs
+
+### Core Catalog APIs
 0. Init Catalog  
 1. Load Catalog  
 2. Create Database  
-3. Show Databases  
-4. Select Database  
-5. Show Tables  
-6. Save Catalog  
+3. Drop Database  
+4. Show Databases  
+5. Select Database  
+6. Show Tables  
 7. Create Table  
-8. Init Table  
-9. Init Page  
-10. Page Count  
-11. Create Page  
-12. Read Page  
-13. Write Page  
-14. Page Free Space  
-15. Add Tuple to Page  
-16. Read Item / Get Tuple
+8. Drop Table  
+9. Alter Table Add Column  
+10. Get Table Metadata  
+
+### Constraint APIs
+11. Add Primary Key Constraint  
+12. Add Foreign Key Constraint  
+13. Add Unique Constraint  
+14. Add Not Null Constraint  
+15. Validate Constraints  
+16. Get Constraints for Table  
+
+### Index APIs
+17. Create Index  
+18. Drop Index  
+
+### Type APIs
+19. Register Built-in Types  
+20. Lookup Type by Name  
+
+### Page / Table / Tuple APIs
+21. Init Table  
+22. Init Page  
+23. Page Count  
+24. Create Page  
+25. Read Page  
+26. Write Page  
+27. Page Free Space  
+28. Add Tuple to Page  
+29. Read Item / Get Tuple  
+
 ---
 
-## API Descriptions
+## Core Catalog API Descriptions
+
 ### 0. **init_catalog** API
 
 **Description:**  
-Creates `catalog.json` if it doesn’t exist and initializes it with an empty catalog 
-
-```json
-{"databases": {}}
-```
+Dual-mode catalog initialisation called at startup. Detects whether page-based catalog storage exists and bootstraps the system if necessary.
 
 **Function:**  
 ```rust
-pub fn init_catalog()
+pub fn init_catalog(bm: &mut BufferManager)
 ```
 
+**Input:**
+- `bm` — Mutable reference to the buffer manager.
+
 **Implementation:**
-1. Check if database/global/catalog.json exists.
-2. If not, create parent directories and an empty file with data **```json{"databases": {}}```**.
+1. Create `database/global/` and `database/base/` directories if they do not exist.
+2. Check if `database/global/catalog_pages/` exists.
+3. If yes, report that the page backend is detected.
+4. If no, call `bootstrap_catalog(bm)` to initialise the system catalogs, register built-in types, and create the system database.
+
 ---
+
 ### 1. **load_catalog** API
 
 **Description:**  
-* Loads the catalog table metadata into memory as a **Catalog struct**.
+Loads the catalog from the active storage backend. Attempts page-based loading first; falls back to an empty catalog on failure.
 
 **Function:**  
 ```rust
-pub fn load_catalog() -> Catalog
+pub fn load_catalog(bm: &mut BufferManager) -> Catalog
 ```
-**Ouput:**
-*  Returns a valid Catalog struct containing table metadata.
+
+**Output:**
+- Returns a `Catalog` struct populated with all databases, tables, columns, constraints, and index OIDs.
 
 **Implementation:**
-* Reads the catalog file, validates its contents, and deserializes it into a Catalog struct.
+1. If `catalog_pages/` exists, load from pages:
+   - Read OID counter from `pg_oid_counter.dat`
+   - Scan `pg_database` → populate `catalog.databases`
+   - Scan `pg_table` → attach tables to parent databases by `db_oid`
+   - Scan `pg_column` → attach columns to tables by `table_oid`, sort by position
+   - Scan `pg_constraint` → attach constraints to tables by `table_oid`
+   - Scan `pg_index` → attach index OIDs to tables by `table_oid`
+2. On any failure, return `Catalog::new()` (empty).
+
+---
 
 ### 2. **create_database** API
 
 **Description:**  
-* Creates a new database in the catalog.
+Creates a new database with metadata (owner, encoding) and persists it to `pg_database`.
 
 **Function:**  
 ```rust
-pub fn create_database(catalog: &mut Catalog, db_name: &str) -> Result<(), StorageError>
-```
-**Input:**
-* **catalog:**	 in-memory catalog metadata.
-* **db_name:**	Name of the new database to be created.
-
-**Ouput:**
-*  Returns Ok on success or an error if creation fails.
-
-**Implementation:**
-1. Check if the database already exists; if not, insert a new empty entry into catalog.databases.
-2. Serialize the updated Catalog and write it to database/global/catalog.json.
-3. Create a new directory at `database/base/{db_name}` for the database’s physical storage.
-
-### 2. **save_catalog** API
-
-**Description:**  
-* Writes the in-memory Catalog structure (containing table metadata) back to disk in JSON format.
-
-**Function:**  
-```rust
-pub fn save_catalog(catalog: &Catalog)
+pub fn create_database(
+    catalog: &mut Catalog,
+    pm: &mut CatalogPageManager,
+    bm: &mut BufferManager,
+    db_name: &str,
+    owner: &str,
+    encoding: Encoding,
+) -> Result<u32, CatalogError>
 ```
 
 **Input:**
-* catalog: A reference to a Catalog struct in memory that holds all table definitions.
+- `catalog` — In-memory catalog metadata.
+- `pm` — Catalog page manager for page-based persistence.
+- `bm` — Buffer manager for I/O.
+- `db_name` — Name of the new database (must be non-empty and unique).
+- `owner` — Owner string (e.g., `"default_user"`).
+- `encoding` — Character encoding (`Encoding::UTF8` or `Encoding::ASCII`).
 
-**Ouput:**
-* Writes the catalog data to `CATALOG_FILE`.
+**Output:**
+- Returns the allocated `db_oid` on success.
 
 **Implementation:**
-* Serializes the given Catalog struct into a  JSON string and writes it to the catalog file path.
-
+1. Validate that the name is non-empty and not already in use.
+2. Allocate a new OID via `catalog.alloc_oid()`.
+3. Create `database/base/{db_name}/` directory.
+4. Serialise and insert a record into `pg_database`.
+5. Add the `Database` struct to the in-memory catalog.
+6. Invalidate the database cache entry.
 
 ---
 
-### 3. **create_table** API
+### 3. **drop_database** API
+
 **Description:**  
-* Creates a new table entry in the in-memory Catalog with the provided table name and column definitions.
-* If the table does not already exist, it is added to the catalog and the updated catalog is written to disk in JSON format.
+Drops a database and all its tables, constraints, and indexes.
 
 **Function:**  
 ```rust
-pub fn create_table(catalog: &mut Catalog, table_name: &str, columns: Vec<Column>) 
+pub fn drop_database(
+    catalog: &mut Catalog,
+    pm: &mut CatalogPageManager,
+    bm: &mut BufferManager,
+    db_name: &str,
+) -> Result<(), CatalogError>
+```
+
+**Implementation:**
+1. Resolve `db_oid` from the in-memory catalog.
+2. Drop all tables in the database via `drop_table()`.
+3. Find and delete the database record from `pg_database`.
+4. Remove the database directory from disk.
+5. Remove from in-memory catalog and invalidate cache.
+
+---
+
+### 4. **show_databases** API
+
+**Description:**  
+Displays all databases from the page-based catalog with additional metadata.
+
+**Function:**  
+```rust
+pub fn show_databases(catalog: &Catalog, pm: &mut CatalogPageManager, bm: &mut BufferManager)
+```
+
+**Output:**
+- Prints a formatted table: `Database | Owner | Created At`.
+- Data is fetched directly from `pg_database` via `pm.scan_catalog()`.
+
+---
+
+### 5. **show_tables** API
+
+**Description:**  
+Displays all user tables in a database from the page-based catalog with statistics.
+
+**Function:**  
+```rust
+pub fn show_tables(catalog: &Catalog, pm: &mut CatalogPageManager, bm: &mut BufferManager, db_name: &str)
+```
+
+**Output:**
+- Prints a formatted table: `Table Name | Rows | Pages | Created At`.
+
+---
+
+### 6. **create_table** API
+
+**Description:**  
+Creates a new table with columns and constraints, persisting metdata to `pg_table` and `pg_column`.
+
+**Function:**  
+```rust
+pub fn create_table(
+    catalog: &mut Catalog,
+    pm: &mut CatalogPageManager,
+    bm: &mut BufferManager,
+    db_name: &str,
+    table_name: &str,
+    col_defs: Vec<ColumnDefinition>,
+    constraint_defs: Vec<ConstraintDefinition>,
+) -> Result<u32, CatalogError>
 ```
 
 **Input:**
-* catalog: A mutable reference to the in-memory Catalog structure that holds metadata for all tables.
-* table_name: A string slice representing the name of the new table to be created.
-* columns: A vector of Column structs, where each struct contains the column name and data type for the new table.
+- `col_defs` — Column definitions: name, type name, nullability, default value.
+- `constraint_defs` — Constraint definitions (PrimaryKey, ForeignKey, Unique, NotNull).
 
-**Ouput:**
-* Updates the in-memory Catalog by inserting the new table.
-* Persists the updated catalog to disk by writing to the CATALOG_FILE in JSON format using **save_catalog** API.
+**Output:**
+- Returns the allocated `table_oid` on success.
 
 **Implementation:**
-* Checks if a table with the given name already exists in the catalog.
-* If not, creates a new Table struct using the provided columns.
-* Inserts the table into the catalog.tables HashMap.
-* Calls save_catalog(catalog) to serialize and write the updated catalog to disk.
-* Creates a new data file for the table in `{TABLE_DIR}/{table_name}.dat`.
-* Initializes the table file header by writing TABLE_HEADER_SIZE bytes of zeros using init_table().
+1. Validate the database exists and the table name is unique within it.
+2. Allocate `table_oid` and per-column OIDs.
+3. Resolve each column's type via `DataType::from_name()`.
+4. Serialise and insert column records into `pg_column`.
+5. Create and initialise the table data file via `init_table()`.
+6. Serialise and insert table record into `pg_table`.
+7. Add to in-memory catalog; invalidate cache.
+8. Process constraint definitions (PK, FK, UNIQUE, NOT NULL).
+
 ---
 
-### 4. **init_table** API
-**Description:**
+### 7. **drop_table** API
 
-* Initializes the **Table Header** by writing the **first page** (8192 bytes) into the table file with 0's. The first 4 bytes represent the **Page Count** (1).
-
-**Function:**  
-```rust
-pub fn init_table(file: &mut File)
-```
-**Input:** 
-`file:` File pointer to update Table Header.
-
-**Output:** 
-Table header (first page) initialized with page_count = 1 in the first 4 bytes and remaining bytes set to zero.
-
-**Implementation:**
-1. Move the file cursor to the beginning of the file.
-2. Allocate a buffer of 8192 bytes (**TABLE_HEADER_SIZE**) initialized to zero.
-3. Write the entire 8192-byte buffer (including the page count) to disk, marking the creation of the first table page.
-4. Write another 8192-byte buffer to disk to initialize the first data page along with page headers using `create_page` API (Page 1), which will store table tuples.
----
-
-### 5. **init_page** API
-**Description:**
-
-* Initializes the **Page Header** with two offset values for **In Memory Page**:
-    - **Lower Offset** (`PAGE_HEADER_SIZE`) → bytes 0..4
-    - **Upper Offset** (`PAGE_SIZE`) → bytes 4..8
-
-**Function:**  
-```rust
-pub fn init_page(page:&mut Page)
-```
-**Input:** 
-`page:` **In Memory Page** to set Header - Lower and Upper Offsets.
-
-**Output:** 
-Page header updated with lower and upper offsets.
-
-**Implementation:**
-1. Write the lower offset (`PAGE_HEADER_SIZE`) into the first 4 bytes of the page header (0..4).
-2. Write the upper offset (`PAGE_SIZE`) into the next 4 bytes of the page header (4..8).
----
-
-### 6.**page_count** API
-**Description:**
-To get total number of pages in a file
-
-**Function:**  
-```rust
-pub fn page_count(file: &mut File)
-```
-**Input:** 
-`file:` file to calculate number of pages.
-
-**Output:** 
-Total number of pages present in the file.
-
-**Implementation:**
-1. Use the **read_page()** function to read the first page (page ID 0) from the file into memory.
-2. Extract the **first 4 bytes** from the in-memory page buffer — these bytes represent the page count stored in the table header.
-3. Return the first 4 bytes as page count.
----
-
-### 7. **create_page** API
 **Description:**  
-Create a page in disk for a file.
+Drops a table and all its dependent objects (indexes, constraints).
 
 **Function:**  
 ```rust
-pub fn create_page(file: &mut File)
+pub fn drop_table(
+    catalog: &mut Catalog,
+    pm: &mut CatalogPageManager,
+    bm: &mut BufferManager,
+    table_oid: u32,
+) -> Result<(), CatalogError>
 ```
-**Input:** 
-`file:` file to create to a file
-
-**Output:** 
-1. Create a page at the end of the file.
-2. Update the File Header with **Page Count**.
 
 **Implementation:**
-1. Initializes a new page **in memory** using **init_page** API (update page header - lower and upper).
-2. Reads the **current page count** from the file using the **page_count** API.
-3. Moves the file cursor to the end of the file.
-4. Writes the initialized in-memory page to the file and **updates the file header** by incrementing the page count stored in the first 4 bytes.
+1. Check for FK dependencies from other tables — return `ForeignKeyDependency` error if found.
+2. Drop all indexes on this table.
+3. Remove the table data file.
+4. Delete the record from `pg_table`.
+5. Remove from in-memory catalog; invalidate cache entries.
+
 ---
 
-### 8. **read_page** API
+### 8. **alter_table_add_column** API
+
 **Description:**  
-Reads a page from a disk/file into memory.
+Adds a new column to an existing table.
 
 **Function:**  
 ```rust
-pub fn read_page(file: &mut File, page: &mut Page, page_num: u32)
+pub fn alter_table_add_column(
+    catalog: &mut Catalog,
+    pm: &mut CatalogPageManager,
+    bm: &mut BufferManager,
+    table_oid: u32,
+    col_def: ColumnDefinition,
+) -> Result<u32, CatalogError>
 ```
-**Input:** 
-`file:` file to read from, 
-`page:` memory page to fill, 
-`page_num:` page number to read
 
-**Output:** 
-Populates the given memory page with data read from the file.
+**Output:**
+- Returns the allocated `column_oid`.
 
-**Implementation:**
-1. Calculates the **offset** as **(page_num * PAGE_SIZE)** and moves the file cursor to the correct position.
-2. Reads data from that offset position up to **offset + PAGE_SIZE** and copies it into the page memory.
+**Constraints:**
+- If the column is NOT NULL, a default value **must** be provided.
+- Column name must not already exist in the table.
 
-**Cases Handled:**
-1. Checks the file size and returns an error if the requested page does not exist in the file.
 ---
 
-### 9.**write_page** API
+### 9. **get_table_metadata** API
+
 **Description:**  
-Write a page from memory to disk/file.
+Retrieves complete table metadata including resolved columns, constraints, and indexes.
 
 **Function:**  
 ```rust
-pub fn write_page(file: &mut File, page: &mut Page, page_num: u32)
+pub fn get_table_metadata(
+    catalog: &Catalog,
+    pm: &CatalogPageManager,
+    bm: &mut BufferManager,
+    db_name: &str,
+    table_name: &str,
+) -> Result<TableMetadata, CatalogError>
 ```
-**Input:** 
-`file:` file to write, 
-`page:` memory page to copy from, 
-`page_num:` page number to write
 
-**Output:** 
-Writes the contents of the given memory page to the file at the specified page offset.
-
-**Implementation:**
-1. Calculates the **offset** as `page_num * PAGE_SIZE` and moves the file cursor to the correct position.
-2. copy the contents of the given memory page from offset to `offset + PAGE_SIZE` positions to the file.
 ---
 
-### 10. **page_free_space** API
-**Description:**  
-To calculate the total amount of free space left in the page.
+## Constraint APIs
 
-**Function:**  
+For complete constraint API documentation, see the [Catalog Manager API Reference](./projects/catalog-manager/api-reference.md#constraint-management).
+
+### 10. **add_primary_key_constraint** API
+
 ```rust
-pub fn page_free_space(page: &Page) 
+pub fn add_primary_key_constraint(catalog, pm, bm, table_oid, column_names, constraint_name) -> Result<u32, CatalogError>
 ```
-**Input:** 
-`page:` page to calculate the free space.
+Adds a PK constraint with a backing unique B-Tree index. Sets referenced columns to NOT NULL.
 
-**Output:** 
-Total amount of freespace left in the page.
+### 11. **add_foreign_key_constraint** API
 
-**Implementation:**
-1. Read the `lower pointer` from the first 4 bytes of the page.
-2. Read the `upper pointer` from the next 4 bytes of the page.
-3. Calculate `free space`  = `upper - lower`.
-4. Return the free space.
+```rust
+pub fn add_foreign_key_constraint(catalog, pm, bm, table_oid, column_names, referenced_table_oid, referenced_column_names, on_delete, on_update, constraint_name) -> Result<u32, CatalogError>
+```
+Adds an FK constraint. Validates column counts match and referenced columns are covered by PK/UNIQUE.
+
+### 12. **add_unique_constraint** API
+
+```rust
+pub fn add_unique_constraint(catalog, pm, bm, table_oid, column_names, constraint_name) -> Result<u32, CatalogError>
+```
+Adds a UNIQUE constraint with a backing B-Tree index.
+
+### 13. **add_not_null_constraint** API
+
+```rust
+pub fn add_not_null_constraint(catalog, pm, bm, table_oid, column_oid) -> Result<(), CatalogError>
+```
+Sets `is_nullable = false` on the specified column.
+
+### 14. **validate_constraints** API
+
+```rust
+pub fn validate_constraints(catalog, pm, bm, table_oid, tuple_values) -> Result<(), ConstraintViolation>
+```
+Validates all constraints for a tuple before insertion. Returns specific violation errors (NotNull, Unique, ForeignKey).
+
 ---
 
-### 11. Add Tuple
+## Index APIs
+
+For complete index API documentation, see the [Catalog Manager API Reference](./projects/catalog-manager/api-reference.md#index-management).
+
+### 15. **create_index** API
+
+```rust
+pub fn create_index(catalog, pm, bm, table_oid, column_oids, is_unique, is_primary, index_name) -> Result<u32, CatalogError>
+```
+Creates a B-Tree index on specified columns. Creates the index `.idx` file and persists metadata to `pg_index`.
+
+### 16. **drop_index** API
+
+```rust
+pub fn drop_index(catalog, pm, bm, index_oid) -> Result<(), CatalogError>
+```
+Drops an index. Cannot drop indexes referenced by PK or UNIQUE constraints.
+
+---
+
+## Page / Table / Tuple APIs
+
+### 17. **init_table** API
 **Description:**
-Adds raw data to the file.
+Initializes the **Table Header** by writing the first page (8,192 bytes) with `page_count = 1` in the first 4 bytes, followed by an empty data page.
 
 **Function:**  
-* In the buffer manager load_csv_into_pages function.
-
-**Output:** 
-Data inserted in the file.
+```rust
+pub fn init_table(file: &mut File) -> Result<(), io::Error>
+```
 
 **Implementation:**
-1. Get the **total number of pages** in the file using [`page_count`](#4page_count-api) API.
-2. Read the **last page** into memory using [`read_page`](#2-read_page-api) API.
-3. Check **free space** in the page using [`page_free_space`](#5-page_free_space-api) API.
-4. If the last page has enough free space to store the data and its ItemId 
-(i.e., if `free_space >= data.size() + ITEM_ID_SIZE`):
-    a. Calculate the **insertion offset** from the upper pointer.
-        `start = upper - data.len()`
-    b. Copy the data bytes into the page buffer starting at this offset.
-    c. Update the **upper pointer** in the page header to the new start of free space.
-    d. Write the **ItemId entry** (offset and length of the data) at the position indicated by the lower pointer.
-    e. Update the **lower pointer** in the page header to account for the newly added ItemId (`lower += ITEM_ID_SIZE`).
-    f. Write the updated page back to disk using [`write_page`](#3write_page-api) API.
-5. If the last page does not have enough free space:
-    a. Create a new page in the file and add the tuple in the new page.
+1. Write an 8,192-byte header page with page count = 1.
+2. Write an 8,192-byte empty data page via `create_page`.
 
+---
 
-* [Code Documentation](https://hemanth-sunkireddy.github.io/Storage-Manager/storage_manager/all.html)
+### 18. **init_page** API
+**Description:**
+Initializes a page header with lower offset (`PAGE_HEADER_SIZE`) and upper offset (`PAGE_SIZE`).
+
+**Function:**  
+```rust
+pub fn init_page(page: &mut Page)
+```
+
+---
+
+### 19. **page_count** API
+**Description:**
+Returns the total number of pages in a file by reading the first 4 bytes of page 0.
+
+**Function:**  
+```rust
+pub fn page_count(file: &mut File) -> u32
+```
+
+---
+
+### 20. **create_page** API
+**Description:**  
+Creates a new data page at the end of a file and increments the page count.
+
+**Function:**  
+```rust
+pub fn create_page(file: &mut File) -> Result<(), io::Error>
+```
+
+---
+
+### 21. **read_page** API
+**Description:**  
+Reads a page from disk into memory.
+
+**Function:**  
+```rust
+pub fn read_page(file: &mut File, page: &mut Page, page_num: u32) -> Result<(), io::Error>
+```
+
+---
+
+### 22. **write_page** API
+**Description:**  
+Writes a page from memory to disk.
+
+**Function:**  
+```rust
+pub fn write_page(file: &mut File, page: &mut Page, page_num: u32) -> Result<(), io::Error>
+```
+
+---
+
+### 23. **page_free_space** API
+**Description:**  
+Calculates free space = `upper - lower`.
+
+**Function:**  
+```rust
+pub fn page_free_space(page: &Page) -> Result<u32, io::Error>
+```
+
+---
+
+### 24. **Add Tuple** API
+**Description:**
+Adds raw data to a table file using the slotted-page layout.
+
+**Implementation:**
+1. Read the last page.
+2. Check if free space ≥ data size + `ITEM_ID_SIZE`.
+3. If yes: write data at `upper - data.len()`, update pointers, write ItemId.
+4. If no: create a new page and insert there.
+
+---
+
 * **Reference**: [Postgres Internals – Page Layouts & Data](https://www.postgresql.org/docs/current/storage-page-layout.html)
-> **Note:** Some APIs have undergone slight implementation changes during development. So, some of the implementation steps might not aligned with the actual code functions.
+> **Note:** Some APIs have undergone implementation changes during development. Refer to the [Catalog Manager Implementation Notes](./projects/catalog-manager/implementation-notes.md) for details on deviations from the original design.

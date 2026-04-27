@@ -10,18 +10,30 @@ title: "Database Doc"
 - The **backend** directory contains the core implementation of the storage manager.
 
 ## Overall Layout of the data
-All persistent data used and created by the system is stored inside the `code/database/` directory. This directory serves as the root location for both metadata and table data. The folder structure and path constants defined in `code/src/backend/layout` specify how databases and tables are organized as directories and files within this location.
+All persistent data used and created by the system is stored inside the `database/` directory. This directory serves as the root location for both metadata and table data. The folder structure and path constants defined in `src/backend/layout.rs` specify how databases and tables are organized as directories and files within this location.
 
 ### Database Directory Layout
 ```bash
 database/
   ├── global/
-  │   └── catalog.json
+  │   ├── catalog_pages/              # Page-based catalog storage
+  │   │   ├── pg_database.dat         # System catalog: databases
+  │   │   ├── pg_table.dat            # System catalog: tables
+  │   │   ├── pg_column.dat           # System catalog: columns
+  │   │   ├── pg_constraint.dat       # System catalog: constraints
+  │   │   ├── pg_index.dat            # System catalog: indexes
+  │   │   └── pg_type.dat             # System catalog: data types
+  │   ├── pg_oid_counter.dat          # Persistent OID counter
+  │   └── catalog.json                # DEPRECATED: Legacy format
   └── base/
       ├── db1/
-      │   └── {table}.dat
+      │   ├── {table}.dat
+      │   └── indexes/
+      │       └── {index_name}.idx
       ├── db2/
-      │   └── {table}.dat
+      │   ├── {table}.dat
+      │   └── indexes/
+      │       └── {index_name}.idx
 ```
 
 ### Directory Descriptions
@@ -32,24 +44,54 @@ database/
 - **global/**  
   Contains system-wide metadata required to interpret database structure.
 
+- **catalog_pages/**  
+  Contains page-based system catalog files. Each file uses the same 8 KB slotted-page format as user tables. See the [Catalog Manager documentation](./projects/catalog-manager/catalog-manager.md) for detailed schema definitions.
+
+- **pg_oid_counter.dat**  
+  Stores the next available Object Identifier (OID) as a 4-byte little-endian `u32`. Updated on every DDL operation when the page backend is active.
+
 - **catalog.json**  
-  Stores metadata for all databases, tables, and their column definitions.
+  Legacy catalog format (deprecated). Maintained for backward compatibility during migration.
 
 - **base/**  
   Contains one subdirectory per database.
 
 - **`{database}/`**  
-  Represents a single database and holds all table files belonging to it.
+  Represents a single database and holds all table files and index files belonging to it.
 
 - **`{table}.dat`**  
   Physical file corresponding to a table, containing both table metadata and tuple data.
 
+- **`indexes/`**  
+  Contains B-Tree index files for the parent database. Each index is stored as `{index_name}.idx`.
 
-## Catalog File Structure
 
-The catalog is stored as a JSON file at `database/global/catalog.json`.
+## Catalog Storage
 
-### Catalog JSON Structure
+RookDB supports a **dual-mode** catalog system:
+
+### Page-Based Catalog (Primary)
+
+The primary catalog backend stores metadata in six system catalog files under `database/global/catalog_pages/`. Each file follows the same slotted-page layout as user tables (8 KB pages with header, item ID array, and tuple data).
+
+The six system catalogs are:
+
+| Catalog | File | Contents |
+|---------|------|----------|
+| pg_database | `pg_database.dat` | Database metadata (name, owner, encoding, timestamp) |
+| pg_table | `pg_table.dat` | Table metadata (name, type, statistics) |
+| pg_column | `pg_column.dat` | Column metadata (name, type, position, defaults) |
+| pg_constraint | `pg_constraint.dat` | Constraint metadata (PK, FK, UNIQUE, NOT NULL, CHECK) |
+| pg_index | `pg_index.dat` | Index metadata (name, type, columns, uniqueness) |
+| pg_type | `pg_type.dat` | Data type metadata (10 built-in types) |
+
+All catalog I/O is routed through the Buffer Manager for efficient caching.
+
+For complete schema definitions, see the [System Catalogs](./projects/catalog-manager/system-catalogs.md) page.
+
+### Legacy JSON Catalog (Deprecated)
+
+The legacy format is a single JSON file at `database/global/catalog.json`:
 
 ```json
 {
@@ -70,42 +112,7 @@ The catalog is stored as a JSON file at `database/global/catalog.json`.
 }
 ```
 
-#### Example Catalog.json file
-```json
-{
-  "databases": {
-    "users": {
-      "tables": {
-        "students": {
-          "columns": [
-            {
-              "name": "id",
-              "data_type": "INT"
-            },
-            {
-              "name": "name",
-              "data_type": "TEXT"
-            }
-          ]
-        },
-        "teachers": {
-          "columns": [
-            {
-              "name": "id",
-              "data_type": "INT"
-            },
-            {
-              "name": "name",
-              "data_type": "TEXT"
-            }
-          ]
-        }
-      }
-    }
-  }
-}
-```
-
+This format is retained for backward compatibility but is no longer the primary storage backend. On a fresh install, the system bootstraps directly into page-based mode.
 
 
 ## Table File Structure

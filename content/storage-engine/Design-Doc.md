@@ -17,7 +17,7 @@ Based on the relational database architecture shown in the above figure, the pri
 
 The architecture of RookDB follows a layered design that separates logical metadata management from the physical representation of tables and the low-level organization of records within pages.
 
-The storage manager in RookDB is broadly divided into the following four layers:
+The storage manager in RookDB is broadly divided into the following layers:
 
 - Catalog Layer  
 - Table Layer  
@@ -28,10 +28,21 @@ The storage manager in RookDB is broadly divided into the following four layers:
 
 ## Catalog Layer
 
-The Catalog Layer is responsible for managing logical metadata required by the database system.  
-It maintains information about databases, tables, and column schemas. In RookDB, catalog metadata is stored in a JSON format.
+The Catalog Layer is responsible for managing all logical metadata required by the database system — databases, tables, columns, constraints, indexes, and data types.
 
-For a detailed description of the catalog structure, refer to the Database Design Document available in the docs section of the GitHub repository.
+RookDB implements a **self-hosting, page-based catalog system** modelled after PostgreSQL's system catalogs. Metadata is stored in six dedicated system catalog files (`pg_database`, `pg_table`, `pg_column`, `pg_constraint`, `pg_index`, `pg_type`) using the same 8 KB slotted-page format as user tables.
+
+Key capabilities of the Catalog Layer include:
+
+- **OID (Object Identifier) system** — every database object receives a globally unique 32-bit identifier, enabling robust cross-references between catalog entries.
+- **Constraint management** — supports Primary Key, Foreign Key (with cascading actions), Unique, NOT NULL, and Check constraints.
+- **Extended type system** — ten built-in types (INT, BIGINT, FLOAT, DOUBLE, BOOL, TEXT, VARCHAR, DATE, TIMESTAMP, BYTES) with alignment and length metadata.
+- **In-memory LRU cache** — reduces disk I/O for frequently accessed metadata with automatic invalidation on DDL operations.
+- **Buffer Manager integration** — all catalog I/O is routed through the Buffer Manager for efficient page caching.
+
+A legacy JSON-based catalog (`catalog.json`) is retained for backward compatibility. On a fresh install, the system bootstraps directly into page-based mode.
+
+For a detailed description of the catalog architecture, see the [Catalog Manager](./projects/catalog-manager/catalog-manager.md) documentation.
 
 ---
 
@@ -56,4 +67,6 @@ RookDB adopts a slotted-page structure inspired by PostgreSQL, consisting of a p
 
 ## Buffer Manager Layer
 
-The Buffer Manager Layer maintains an in-memory cache of pages to minimize disk I/O and efficiently support data loading and manipulation.
+The Buffer Manager Layer maintains an in-memory cache of pages to minimize disk I/O and efficiently support data loading and manipulation. It uses pin/unpin semantics to prevent eviction of actively used pages, and dirty tracking ensures modified pages are persisted to disk.
+
+The Buffer Manager is used by both user-table operations and the Catalog Manager for system catalog page I/O.
