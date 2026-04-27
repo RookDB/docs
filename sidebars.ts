@@ -59,6 +59,13 @@ const sidebars: SidebarsConfig = {
               collapsed: true,
               items: [
                 "storage-engine/projects/catalog-manager/catalog-manager",
+                "storage-engine/projects/catalog-manager/overview",
+                "storage-engine/projects/catalog-manager/architecture",
+                "storage-engine/projects/catalog-manager/data-structures",
+                "storage-engine/projects/catalog-manager/system-catalogs",
+                "storage-engine/projects/catalog-manager/physical-storage",
+                "storage-engine/projects/catalog-manager/api-reference",
+                "storage-engine/projects/catalog-manager/implementation-notes",
               ],
             },
 
