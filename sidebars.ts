@@ -49,6 +49,10 @@ const sidebars: SidebarsConfig = {
               collapsed: true,
               items: [
                 "storage-engine/projects/buffer-manager/buffer-manager",
+                "storage-engine/projects/buffer-manager/replacement-policies",
+                "storage-engine/projects/buffer-manager/api-reference",
+                "storage-engine/projects/buffer-manager/architecture",
+                "storage-engine/projects/buffer-manager/data-structures",
               ],
             },
 
