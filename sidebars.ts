@@ -3,8 +3,9 @@ import type { SidebarsConfig } from "@docusaurus/plugin-content-docs";
 const sidebars: SidebarsConfig = {
   tutorialSidebar: [
     "index",
+
+    // User Guide
     "CLI",
-    "Rook-Parser",
 
     // Storage Engine Section
     {
@@ -136,6 +137,19 @@ const sidebars: SidebarsConfig = {
         },
       ],
     },
+
+    
+    
+    // CLI Sidebar
+    {
+  type: "category",
+  label: "CLI",
+  collapsed: false,
+  items: [
+    "CLI-Dev-Docs",
+  ],
+},
+    "Rook-Parser",
   ],
 };
 
