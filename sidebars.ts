@@ -87,6 +87,13 @@ const sidebars: SidebarsConfig = {
               collapsed: true,
               items: [
                 "storage-engine/projects/fsm-heap-manager/fsm-heap-manager",
+                "storage-engine/projects/fsm-heap-manager/benchmark-report",
+                "storage-engine/projects/fsm-heap-manager/design-doc",
+                "storage-engine/projects/fsm-heap-manager/features-implemented",
+                "storage-engine/projects/fsm-heap-manager/free-space-manager",
+                "storage-engine/projects/fsm-heap-manager/heap-manager",
+                "storage-engine/projects/fsm-heap-manager/submission-requirements",
+                "storage-engine/projects/fsm-heap-manager/tests",
               ],
             },
 
