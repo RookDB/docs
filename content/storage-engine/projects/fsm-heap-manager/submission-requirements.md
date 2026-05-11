@@ -144,4 +144,4 @@ No PDF files are required or included for this submission.
 - [Free Space Manager Deep Dive](./free-space-manager)
 - [Features Implemented](./features-implemented)
 - [Benchmark Report](./benchmark-report)
-- [Testing Guide](./test)
+- [Testing Guide](./tests)
