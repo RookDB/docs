@@ -101,3 +101,7 @@ All persistent data used and created by the system is stored inside the `databas
 The page structure is based on the PostgreSQL slotted-page layout, with only the minimum required metadata implemented.
 
 * For a detailed explanation of the page structure and internal storage layout, refer to the [Page Layout](./Page-Layout) documentation.
+
+### Tuple Structure
+
+* For a detailed explanation of the Tuple structure, refer to the [Tuple Layout](./Tuple-Layout) documentation.

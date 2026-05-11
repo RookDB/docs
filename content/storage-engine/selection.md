@@ -1,5 +1,5 @@
 ---
-title: Select Operators
+title: Select Operatorion
 sidebar_position: 1
 ---
 
@@ -26,13 +26,11 @@ sidebar_position: 1
 8. [Optimizations](#8-optimizations)
 9. [Changes to Existing System](#9-changes-to-existing-system)
 10. [Backend Functions Added](#10-backend-functions-added)
-11. [CLI / Frontend Changes](#11-cli--frontend-changes)
-12. [Benchmark Analysis](#12-benchmark-analysis)
-13. [External APIs Used](#13-external-apis-used)
-14. [New Files Introduced](#14-new-files-introduced)
-15. [Database Structure Changes](#15-database-structure-changes)
-16. [Intermediate Files](#16-intermediate-files)
-17. [Future Work ](#17-future-work-updated)
+11. [Benchmark Analysis](#12-benchmark-analysis)
+12. [External APIs Used](#13-external-apis-used)
+13. [New Files Introduced](#14-new-files-introduced)
+14. [Database Structure Changes](#15-database-structure-changes)
+15. [Future Work ](#17-future-work)
 
 ---
 
@@ -109,10 +107,10 @@ The interactive menu in `frontend/menu.rs` presents option `7. Select tuples`. T
 =============================
 Choose an option:
 ...
-7. Select tuples
+8. Select tuples
 ...
 =============================
-Enter your choice: 7
+Enter your choice: 8
 ```
 
 This dispatches to `data_cmd::show_tuples_cmd(&current_db)`.
@@ -1091,19 +1089,6 @@ Cross-type widening is handled by recursive re-dispatch after promoting the narr
 - Declares all public types (`Predicate`, `Expr`, `ColumnReference`, `Constant`, `TriValue`, `ComparisonOp`, `SelectionExecutor`) along with the filter utility functions.
 - Uses existing crate types: `DataValue`, `DataType`, `Table`, `PhysicalSchema`, `RowLayout`, `NullBitmap`, `compare_nullable`, `OrderedF64`.
 
-### Modified: `frontend/data_cmd.rs`
-
-- Added the `show_tuples_cmd` function, replacing (or supplementing) a simpler tuple display that had no filtering.
-- Added imports: `SelectionExecutor`, `filter_tuples`, `build_predicate_from_sql`.
-
-### Modified: `frontend/menu.rs`
-
-- Added menu option `7. Select tuples` dispatching to `data_cmd::show_tuples_cmd`.
-
-### No Storage Layer Changes
-
-The storage layer (`heap`, `page`, `buffer_manager`, `types`) was **not modified**. The executor reads raw page bytes using the existing `read_page` and `Page` APIs and uses the existing `deserialize_nullable_row` for display.
-
 ---
 
 ## 10. Backend Functions Added
@@ -1165,29 +1150,6 @@ The storage layer (`heap`, `page`, `buffer_manager`, `types`) was **not modified
 
 ---
 
-## 11. CLI / Frontend Changes
-
-### Menu Integration
-
-Option `7. Select tuples` was added to the interactive menu in `frontend/menu.rs`:
-
-```
-=============================
-Choose an option:
-1. Show Databases
-2. Create Database
-3. Select Database
-4. Show Tables
-5. Create Table
-6. Load CSV
-7. Select tuples          ← NEW
-8. Show Table Statistics
-9. Exit
-=============================
-```
-
----
-
 ### Execution Flow (`data_cmd::show_tuples_cmd`)
 
 ```
@@ -1242,52 +1204,6 @@ The CLI prompts for the table name independently before asking for the SQL strin
 | CLI (`data_cmd.rs`) | User I/O, page reading, result printing |
 | Predicate Builder (`where_builder.rs`) | SQL string → `Predicate` tree |
 | Selection Executor (`selection.rs`) | Schema binding, predicate compilation, tuple evaluation |
-
----
-
-### Example Interaction
-
-```
-=============================
-Choose an option:
-...
-7. Select tuples
-...
-=============================
-Enter your choice: 7
-Enter table name: employees
-Enter SQL (single SELECT with WHERE): SELECT * WHERE id > 4
-
-=== Tuples in 'company.employees' ===
-Total pages: 3
-
-id (INT) | name (VARCHAR(10))
-Tuple 1: id=5 name='xJIsV'
-Tuple 2: id=6 name='KzCIUYD'
-Tuple 3: id=9 name='Alice'
-
-=== End of tuples ===
-```
-
----
-
-### Output Format
-
-```
-=== Tuples in '<db>.<table>' ===
-Total pages: <num>
-
-<col1_name> (<col1_type>) | <col2_name> (<col2_type>) | ...
-Tuple 1: col1=<val> col2=<val> ...
-Tuple 2: col1=<val> col2=<val> ...
-...
-
-=== End of tuples ===
-```
-
-- NULL values are printed as `colname=NULL`.
-- Decode errors are printed as `<decode-error: ...>`.
-- Tuple numbering is 1-based and continuous across the filtered results.
 
 ---
 
@@ -1797,14 +1713,7 @@ All functionality introduced for the selection operator operates purely at the q
 
 ---
 
-## 16. Intermediate Files
-
-No intermediate files are generated as part of the selection operator.  
-All processing is performed in-memory during query execution.
-
----
-
-## 17. Future Work 
+## 15. Future Work 
 This section outlines potential enhancements to improve the functionality and performance of the current selection engine implementation .
 
 ---

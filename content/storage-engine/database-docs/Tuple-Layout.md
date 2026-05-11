@@ -1,27 +1,7 @@
 ---
-title: Data Types System
+title: Tuple Layout and Data Types
 sidebar_position: 1
 ---
-
-# Data Types System in RookDB
- RookDB is heavily optimized for zero-copy reads and O(1) random column access for static-sized fields, its internal type system seamlessly integrates both fixed-length and variable-length data types (such as `VARCHAR`). 
-
-This document explores the structural details, layout models, CLI enhancements, benchmark tracking, and future work concerning the types subsystem.
-
----
-
-## Details of newly introduced database files
-
-To support robust type parsing and geometric packing, the following major module hierarchies were added:
-- **`src/backend/types/*.rs`**: A pure rust subsystem responsible for schema parsing (`datatype.rs`), SQL-value encoding (`value.rs`), error handling (`validation.rs`), and raw byte-manipulation within physical memory (`row_layout.rs`, `row.rs`).
-- **`src/backend/statistics/mod.rs`**: A telemetry library that traverses actual stored tables, returning live metrics into a `TableStatistics` payload object regarding byte-packing efficiencies.
-
-**Intermediate & Data Files:**
-- **`database/base/{db_name}/{table_name}.dat`**: The standard binary artifact generated for each table. It now securely stores compacted bytes representing physical schemas under a paginated structure (comprising `ITEM_ID_SIZE` slot arrays and mapped data).
-
----
-
-## Modifications made to the database structure
 
 The internal abstraction now differentiates the **Logical Schema** (the user-defined execution shape) from the **Physical Schema** (the on-disk memory layout). 
 
@@ -63,7 +43,7 @@ graph TD
 
 ---
 
-## Changes to page layout and file structure
+# Tuple Structure
 
 Tuples (rows) inside `.dat` pages now utilize a stringent physical byte architecture:
 
@@ -150,6 +130,9 @@ stateDiagram-v2
 ---
 
 ## Newly created Data structures and their purpose
+
+ RookDB is heavily optimized for zero-copy reads and O(1) random column access for static-sized fields, its internal type system seamlessly integrates both fixed-length and variable-length data types (such as `VARCHAR`). 
+
 
 | Data Structure | Module | Purpose |
 | :--- | :--- | :--- |

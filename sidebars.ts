@@ -22,11 +22,29 @@ const sidebars: SidebarsConfig = {
             "storage-engine/database-docs/database-doc",
             "storage-engine/database-docs/Table-Layout",
             "storage-engine/database-docs/Page-Layout",
+            "storage-engine/database-docs/Tuple-Layout",
           ],
         },
         "storage-engine/design-doc",
+        "storage-engine/selection",
         "storage-engine/API-Doc",
         "storage-engine/Developer-Guide",
+        // FSM and Heap Manager
+        {
+          type: "category",
+          label: "FSM and Heap Manager",
+          collapsed: true,
+          items: [
+            "storage-engine/fsm-heap-manager/fsm-heap-manager",
+            "storage-engine/fsm-heap-manager/benchmark-report",
+            "storage-engine/fsm-heap-manager/design-doc",
+            "storage-engine/fsm-heap-manager/features-implemented",
+            "storage-engine/fsm-heap-manager/free-space-manager",
+            "storage-engine/fsm-heap-manager/heap-manager",
+            "storage-engine/fsm-heap-manager/submission-requirements",
+            "storage-engine/fsm-heap-manager/tests",
+          ],
+        },
         "storage-engine/Code-Docs",
 
         // Projects subsection
@@ -86,33 +104,6 @@ const sidebars: SidebarsConfig = {
               ],
             },
 
-            // FSM and Heap Manager
-            {
-              type: "category",
-              label: "FSM and Heap Manager",
-              collapsed: true,
-              items: [
-                "storage-engine/projects/fsm-heap-manager/fsm-heap-manager",
-                "storage-engine/projects/fsm-heap-manager/benchmark-report",
-                "storage-engine/projects/fsm-heap-manager/design-doc",
-                "storage-engine/projects/fsm-heap-manager/features-implemented",
-                "storage-engine/projects/fsm-heap-manager/free-space-manager",
-                "storage-engine/projects/fsm-heap-manager/heap-manager",
-                "storage-engine/projects/fsm-heap-manager/submission-requirements",
-                "storage-engine/projects/fsm-heap-manager/tests",
-              ],
-            },
-
-            // Fixed Length Data Types
-            {
-              type: "category",
-              label: "Fixed Length Data Types",
-              collapsed: true,
-              items: [
-                "storage-engine/projects/fixed-length-data-types/fixed-length-data-types",
-              ],
-            },
-
             // Variable Length Data Types
             {
               type: "category",
@@ -131,7 +122,6 @@ const sidebars: SidebarsConfig = {
               label: "Select Project Aggregate",
               collapsed: true,
               items: [
-                "storage-engine/projects/select-project-aggregate/selection",
                 "storage-engine/projects/select-project-aggregate/projection",
                 "storage-engine/projects/select-project-aggregate/aggregatation",
               ],
