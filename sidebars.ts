@@ -14,10 +14,20 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         "storage-engine/Introduction",
-        "storage-engine/API-Doc",
-        "storage-engine/database-doc",
+        {
+          type: "category",
+          label: "Database Docs",
+          collapsed: false,
+          items: [
+            "storage-engine/database-docs/database-doc",
+            "storage-engine/database-docs/Table-Layout",
+            "storage-engine/database-docs/Page-Layout",
+          ],
+        },
         "storage-engine/design-doc",
+        "storage-engine/API-Doc",
         "storage-engine/Developer-Guide",
+        "storage-engine/Code-Docs",
 
         // Projects subsection
         {
@@ -30,9 +40,7 @@ const sidebars: SidebarsConfig = {
               type: "category",
               label: "Indexing",
               collapsed: true,
-              items: [
-                "storage-engine/projects/indexing/indexing",
-              ],
+              items: ["storage-engine/projects/indexing/indexing"],
             },
             // JOIN Algorithms
             {
@@ -48,9 +56,7 @@ const sidebars: SidebarsConfig = {
               type: "category",
               label: "Buffer Manager",
               collapsed: true,
-              items: [
-                "storage-engine/projects/buffer-manager/buffer-manager",
-              ],
+              items: ["storage-engine/projects/buffer-manager/buffer-manager"],
             },
 
             // Catalog Manager
@@ -79,7 +85,7 @@ const sidebars: SidebarsConfig = {
                 "storage-engine/projects/sorting-and-ordering/sorting-and-ordering",
               ],
             },
-            
+
             // FSM and Heap Manager
             {
               type: "category",
@@ -136,26 +142,20 @@ const sidebars: SidebarsConfig = {
               type: "category",
               label: "Update and Delete",
               collapsed: true,
-              items: [
-                "storage-engine/projects/update-delete/update-delete",
-              ],
+              items: ["storage-engine/projects/update-delete/update-delete"],
             },
           ],
         },
       ],
     },
 
-    
-    
     // CLI Sidebar
     {
-  type: "category",
-  label: "CLI",
-  collapsed: false,
-  items: [
-    "CLI-Dev-Docs",
-  ],
-},
+      type: "category",
+      label: "CLI",
+      collapsed: false,
+      items: ["CLI-Dev-Docs"],
+    },
     "Rook-Parser",
   ],
 };
