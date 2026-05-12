@@ -102,9 +102,49 @@ examples/example.csv
 
 ---
 
-#### Show Tuples
+## Select Tuples
 
-Displays tuples stored in table pages along with page metadata such as pointers and tuple count.
+```
+=============================
+Choose an option:
+...
+8. Select tuples
+...
+=============================
+Enter your choice: 7
+Enter table name: employees
+Enter SQL (single SELECT with WHERE): SELECT * WHERE id > 4
+
+=== Tuples in 'company.employees' ===
+Total pages: 3
+
+id (INT) | name (VARCHAR(10))
+Tuple 1: id=5 name='xJIsV'
+Tuple 2: id=6 name='KzCIUYD'
+Tuple 3: id=9 name='Alice'
+
+=== End of tuples ===
+```
+
+---
+
+### Output Format
+
+```
+=== Tuples in '<db>.<table>' ===
+Total pages: <num>
+
+<col1_name> (<col1_type>) | <col2_name> (<col2_type>) | ...
+Tuple 1: col1=<val> col2=<val> ...
+Tuple 2: col1=<val> col2=<val> ...
+...
+
+=== End of tuples ===
+```
+
+- NULL values are printed as `colname=NULL`.
+- Decode errors are printed as `<decode-error: ...>`.
+- Tuple numbering is 1-based and continuous across the filtered results.
 
 ---
 

@@ -10,19 +10,15 @@ Follow the instructions in the README of the [CLI repository](https://github.com
 
 
 ## Supported Statements
-* `SHOW DATABASES`;
-    - To list all the databases.
 
-* `SHOW TABLES`;
-    - To list all the tables of a database.
-
-* `CREATE DATABASE db_name`;
-    - To create a new database with name `db_name`.
-
-* `USE db_name`;
-    - Select a database.
-
-* `create table user (id INT, name TEXT);`
-    - Create a new table.
-
-
+| Statement | Function | Example |
+|---|---|---|
+| `SHOW DATABASES;` | Lists all available databases. | `SHOW DATABASES;` |
+| `CREATE DATABASE database_name;` | Creates a new database. | `CREATE DATABASE company;` |
+| `USE database_name;` | Selects a database for subsequent operations. | `USE company;` |
+| `SHOW TABLES;` | Lists all tables in the selected database. | `SHOW TABLES;` |
+| `CREATE TABLE table_name (...);` | Creates a new table with column definitions. | `CREATE TABLE users (id INT, name VARCHAR(100));` |
+| `INSERT INTO table_name VALUES (...);` | Inserts a new row into a table. | `INSERT INTO users VALUES (1, 'Hemanth');` |
+| `SELECT * FROM table_name;` | Retrieves rows from a table. | `SELECT * FROM users;` |
+| `UPDATE table_name SET ... WHERE ...;` | Updates existing rows in a table. | `UPDATE users SET name = 'Kumar' WHERE id = 1;` |
+| `DELETE FROM table_name WHERE ...;` | Deletes rows from a table. | `DELETE FROM users WHERE id = 1;` |
