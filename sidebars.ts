@@ -127,12 +127,20 @@ const sidebars: SidebarsConfig = {
               ],
             },
 
-            // Update and Delte
+            // Update and Delete
             {
               type: "category",
               label: "Update and Delete",
               collapsed: true,
-              items: ["storage-engine/projects/update-delete/update-delete"],
+              items: [
+                "storage-engine/projects/update-delete/index",
+                "storage-engine/projects/update-delete/algorithms",
+                "storage-engine/projects/update-delete/backend-functions",
+                "storage-engine/projects/update-delete/benchmark",
+                "storage-engine/projects/update-delete/data-structures",
+                "storage-engine/projects/update-delete/file-changes",
+                "storage-engine/projects/update-delete/frontend-steps",
+              ],
             },
           ],
         },
