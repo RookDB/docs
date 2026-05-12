@@ -1,4 +1,4 @@
-# RookDB Benchmark Report
+# FSM Benchmark Report
 
 This report documents the benchmark scripts, how to run them, the outputs they generate, and what the latest results mean for the FSM/heap manager implementation.
 

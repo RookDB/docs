@@ -23,39 +23,9 @@ The current implementation is focused on page-level storage. It supports inserts
 | `<table>.dat.fsm` | Sidecar FSM fork with page-level free-space categories |
 | `database/global/catalog.json` | Catalog metadata for databases and tables |
 
-### Heap Pages
 
-| Page | Role |
-| --- | --- |
-| Page 0 | Header metadata page |
-| Page 1+ | Slotted heap data pages |
 
-### Heap Page Format
 
-Each heap page is 8192 bytes.
-
-| Offset | Size | Meaning |
-| --- | --- | --- |
-| 0..4 | 4 bytes | `lower` pointer, next free slot entry in the slot directory |
-| 4..8 | 4 bytes | `upper` pointer, start of tuple data region |
-| 8..n | variable | Slot directory, 8 bytes per slot `(offset, length)` |
-| ... | variable | Free space between directory and tuple data |
-| end | variable | Tuple payloads packed from the end of the page backward |
-
-The free space reported by the page helpers is `upper - lower`, which is the contiguous region that can accept new inserts.
-
-## Header Metadata
-
-Page 0 stores a 20-byte `HeaderMetadata` structure.
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `page_count` | `u32` | Total number of heap pages, including page 0 |
-| `fsm_page_count` | `u32` | Total number of FSM pages currently tracked |
-| `total_tuples` | `u64` | Total inserted tuples |
-| `last_vacuum` | `u32` | Unix timestamp of the last vacuum-style update |
-
-`HeaderMetadata::new()` starts with `page_count = 1`, `fsm_page_count = 0`, `total_tuples = 0`, and `last_vacuum = 0`. When a heap is created, `HeapManager::create()` writes the header page, creates the first data page, and then synchronizes the FSM state.
 
 ## Core Modules and Responsibilities
 
@@ -235,45 +205,6 @@ The FSM stores free space as a `u8` category in the range `0..=255`.
 
 The program entry point is `cargo run`, which initializes `env_logger` and starts the interactive menu in `src/frontend/menu.rs`.
 
-### Menu Options
-
-| Option | Action |
-| --- | --- |
-| 1 | Show databases |
-| 2 | Create database |
-| 3 | Select database |
-| 4 | Show tables |
-| 5 | Create table |
-| 6 | Load CSV |
-| 7 | Insert single tuple |
-| 8 | Show tuples |
-| 9 | Show table statistics |
-| 10 | Check heap health |
-| 11 | Exit |
-
-### Table Creation
-
-`create_table_cmd()` collects column definitions from the user, stores them in the catalog, saves the catalog, and initializes the table file on disk. `BufferManager::load_table_from_disk()` then loads the table pages back into memory using `read_all_pages()`.
-
-### CSV Loading
-
-`load_csv()` validates the schema before it reads any data rows. It checks that each column type is supported, then opens the CSV file and processes rows one at a time:
-
-- skip empty rows
-- validate column count
-- validate each value against its column type
-- serialize the row to bytes
-- insert it through `HeapManager::insert_tuple()`
-
-This means malformed rows are rejected without aborting the whole load. Valid rows still get inserted.
-
-### Single-Tuple Insertion
-
-`insert_single_tuple()` uses the same validation and serialization path as CSV loading, but it prompts for one value per column in the CLI.
-
-### Sequential Scan Output
-
-`show_tuples()` renders tuples as a formatted table. It reads the schema from the catalog, walks each data page, validates page headers, decodes tuple bytes by column type, and prints a single numbered row per tuple.
 
 ### Heap Diagnostics
 
@@ -459,41 +390,6 @@ This subsection explains what the benchmark numbers mean for system behavior.
 - Results can vary with page cache, background load, and thermal state.
 - Time values for external engines are second-granularity in shell scripts.
 - Recommended reporting practice: run multiple repetitions and publish median with min/max (or p95 where applicable).
-
-## Submission Checklist Coverage
-
-This section maps the required submission checklist to concrete sections in this document.
-
-1. Details of newly introduced database files, structure, contents, and intermediate generation.
-	- Covered in `High-Level Layout` and `Header Metadata`.
-	- Includes `.dat`, `.dat.fsm`, catalog file, and benchmark artifact files in `benchmark_runs/`.
-
-2. Modifications made to the database structure.
-	- Covered in `What This Project Does`, `High-Level Layout`, and `Heap Manager Behavior`.
-
-3. Changes to page layout or file structure, including tuple layout updates.
-	- Covered in `Heap Page Format`, `Header Metadata`, and `Slot Reuse`/`Deletion` behavior.
-
-4. Algorithms used.
-	- Covered in `Insertion Flow`, `FSM Behavior` (`Search`, `Updates`, `Rebuild`), and benchmark interpretation.
-
-5. Newly created data structures and their purpose.
-	- Covered in `Header Metadata`, `Core Modules and Responsibilities`, and `FSM Behavior` (`FSMPage`, constants, iterator models).
-
-6. Backend functions created and their purpose.
-	- Covered in `Core Modules and Responsibilities` with function-level tables for heap, FSM, disk, and executor modules.
-
-7. Frontend/CLI changes.
-	- Covered in `CLI Workflow`, `Menu Options`, and command-level descriptions (`Load CSV`, `Insert Single Tuple`, `Show Tuples`, `Check Heap Health`).
-
-8. BenchMark (if available) results.
-	- Covered in `Benchmark Results (Available)`, `Benchmark Analysis and Interpretation`, and the auto-updated benchmark log block.
-
-9. Potential future work.
-	- Covered in `Current Limitations and Future Work` and `Benchmark Method Caveats` recommendations.
-
-10. No PDF uploads.
-	- This documentation is maintained as Markdown (`.md`) only.
 
 ## Current Limitations and Future Work
 

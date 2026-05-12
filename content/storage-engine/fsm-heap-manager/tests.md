@@ -1,4 +1,4 @@
-# RookDB Testing Strategy & Test Suite
+# Testing Suite for FSM
 
 ## Overview
 

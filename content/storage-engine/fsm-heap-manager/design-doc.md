@@ -1,10 +1,5 @@
-# RookDB: Solution Design Phase - Free Space Manager and Heap File Manager
+# FSM Solution Design Phase
 
-**Project:** 6. Free Space Manager and Heap File Manager
-
-**Date:** 23rd April, 2026
-
----
 
 ## PROJECT SCOPE
 

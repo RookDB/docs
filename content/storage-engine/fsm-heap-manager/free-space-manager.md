@@ -30,6 +30,10 @@ RookDB uses a **PostgreSQL-style binary max-tree** to efficiently track free spa
 
 ### 1.2 Visual Tree Diagrams
 
+### FSM Page Layout Diagram
+
+![FSM Page Layout](/assets/fsm/FSM_Page_Layout.png)
+
 **FSM Level Tree Structure:**
 ![FSM Level Tree Structure](/assets/fsm/FSM_Level_Tree_Structure.png)
 
