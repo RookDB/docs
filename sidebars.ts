@@ -45,6 +45,22 @@ const sidebars: SidebarsConfig = {
             "storage-engine/fsm-heap-manager/tests",
           ],
         },
+        // Update and Delete
+        {
+          type: "category",
+          label: "Update and Delete",
+          collapsed: true,
+          items: [
+            "storage-engine/update-delete/index",
+            "storage-engine/update-delete/algorithms",
+            "storage-engine/update-delete/backend-functions",
+            "storage-engine/update-delete/benchmark",
+            "storage-engine/update-delete/data-structures",
+            "storage-engine/update-delete/file-changes",
+            "storage-engine/update-delete/frontend-steps",
+          ],
+        },
+
         "storage-engine/Code-Docs",
 
         // Projects subsection
@@ -124,22 +140,6 @@ const sidebars: SidebarsConfig = {
               items: [
                 "storage-engine/projects/select-project-aggregate/projection",
                 "storage-engine/projects/select-project-aggregate/aggregatation",
-              ],
-            },
-
-            // Update and Delete
-            {
-              type: "category",
-              label: "Update and Delete",
-              collapsed: true,
-              items: [
-                "storage-engine/projects/update-delete/index",
-                "storage-engine/projects/update-delete/algorithms",
-                "storage-engine/projects/update-delete/backend-functions",
-                "storage-engine/projects/update-delete/benchmark",
-                "storage-engine/projects/update-delete/data-structures",
-                "storage-engine/projects/update-delete/file-changes",
-                "storage-engine/projects/update-delete/frontend-steps",
               ],
             },
           ],
