@@ -27,7 +27,6 @@ const sidebars: SidebarsConfig = {
         },
         "storage-engine/design-doc",
         "storage-engine/selection",
-        "storage-engine/API-Doc",
         "storage-engine/Developer-Guide",
         // FSM and Heap Manager
         {
@@ -58,6 +57,15 @@ const sidebars: SidebarsConfig = {
             "storage-engine/update-delete/data-structures",
             "storage-engine/update-delete/file-changes",
             "storage-engine/update-delete/frontend-steps",
+          ],
+        },
+        // Statements Flow
+        {
+          type: "category",
+          label: "Statements Flow/API Docs",
+          collapsed: true,
+          items: [
+            "storage-engine/statements-flow/create_database",
           ],
         },
 
