@@ -63,7 +63,7 @@ const sidebars: SidebarsConfig = {
         {
           type: "category",
           label: "Statements Flow/API Docs",
-          collapsed: true,
+          collapsed: false,
           items: [
             "storage-engine/statements-flow/create_database",
             "storage-engine/statements-flow/create_table",
@@ -83,7 +83,7 @@ const sidebars: SidebarsConfig = {
         {
           type: "category",
           label: "Projects",
-          collapsed: false,
+          collapsed: true,
           items: [
             // Indexing
             {
