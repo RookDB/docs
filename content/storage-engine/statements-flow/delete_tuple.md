@@ -1,6 +1,6 @@
 ---
-id: delete_table
-title: "Delete Table"
+id: delete_tuple
+title: "Delete Tuple"
 ---
 ### **Delete Tuple**
 
