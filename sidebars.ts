@@ -66,6 +66,14 @@ const sidebars: SidebarsConfig = {
           collapsed: true,
           items: [
             "storage-engine/statements-flow/create_database",
+            "storage-engine/statements-flow/create_table",
+            "storage-engine/statements-flow/show_databases",
+            "storage-engine/statements-flow/delete_tuple",
+            "storage-engine/statements-flow/insert_tuple",
+            "storage-engine/statements-flow/select_database",
+            "storage-engine/statements-flow/select_tuples",
+            "storage-engine/statements-flow/show_tables",
+            "storage-engine/statements-flow/update_tuple",
           ],
         },
 
