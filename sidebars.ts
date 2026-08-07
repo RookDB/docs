@@ -99,6 +99,9 @@ const sidebars: SidebarsConfig = {
               collapsed: true,
               items: [
                 "storage-engine/projects/join-algorithms/join-algorithms",
+                "storage-engine/projects/join-algorithms/design-rationale",
+                "storage-engine/projects/join-algorithms/developer-guide",
+                "storage-engine/projects/join-algorithms/cost-model",
               ],
             },
             // Buffer Manager
