@@ -78,19 +78,17 @@ pub fn load_catalog(bm: &mut BufferManager) -> Catalog
 ```
 
 **Output:**
-- Returns a `Catalog` struct populated with all databases, tables, columns, constraints, and index OIDs from the page backend.
+- Returns a `Catalog` struct configured for lazy-loading. In-memory metadata maps are empty; data is loaded on-demand via the `CatalogCache`.
 
 **Implementation:**
 1. If `catalog_pages/` exists, load from pages via `load_catalog_from_pages(bm)`.
-2. On failure, return `Catalog::new()` (empty catalog).
+2. On failure, return `Catalog::new()` (empty catalog shell).
 
 The page-based loader:
-1. Initialises `OidCounter` from `pg_oid_counter.dat`.
-2. Scans `pg_database` → populates `catalog.databases`.
-3. Scans `pg_table` → attached to parent databases by `db_oid`.
-4. Scans `pg_column` → attached to parent tables by `table_oid`, sorted by `column_position`.
-5. Scans `pg_constraint` → attached to parent tables by `table_oid`.
-6. Scans `pg_index` → index OIDs attached to parent tables by `table_oid`.
+1. Initialises the `OidCounter` from `pg_oid_counter.dat`.
+2. Sets `page_backend_active = true`.
+3. Sets `oid_counter` to the value loaded from the counter file.
+4. Returns the `Catalog` shell. No system catalogs are scanned at this stage (lazy loading).
 
 ---
 
@@ -162,7 +160,7 @@ pub fn create_database(
 2. Allocate a new OID via `catalog.alloc_oid()`.
 3. Create the `database/base/{db_name}/` directory.
 4. Serialise and insert a record into `pg_database`.
-5. Add the `Database` struct to the in-memory catalog.
+5. Insert the `Database` struct into `catalog.cache`.
 6. Invalidate the database cache entry.
 
 ---
@@ -183,11 +181,11 @@ pub fn drop_database(
 ```
 
 **Implementation:**
-1. Resolve `db_oid` from the in-memory catalog.
+1. Resolve `db_oid` via `get_database()`, which checks the cache then scans `pg_database`.
 2. Drop all tables belonging to this database via `drop_table()`.
 3. Find and delete the database record from `pg_database`.
 4. Remove the database directory from disk.
-5. Remove from in-memory catalog and invalidate cache.
+5. Invalidate the database cache entry.
 
 ---
 
@@ -244,7 +242,7 @@ pub fn create_table(
 4. Serialise and insert column records into `pg_column`.
 5. Create the table data file (`{db_name}/{table_name}.dat`) and initialise it.
 6. Serialise and insert a record into `pg_table`.
-7. Add the `Table` to the in-memory catalog and invalidate cache.
+7. Insert the `Table` into `catalog.cache` and invalidate the table cache entry.
 8. Process each constraint definition (PK, FK, UNIQUE, NOT NULL) via the respective constraint functions.
 
 ---
@@ -265,12 +263,12 @@ pub fn drop_table(
 ```
 
 **Implementation:**
-1. Check for foreign key dependencies from other tables — return `ForeignKeyDependency` error if found.
+1. Check for foreign key dependencies from other tables by scanning `pg_constraint`.
 2. Drop all indexes on this table via `drop_index()`.
-3. Locate the table's database name and table name.
+3. Locate the table's database name and table name via `get_table()` and a scan of `pg_database`.
 4. Remove the table data file from disk.
 5. Delete the record from `pg_table`.
-6. Remove from in-memory catalog and invalidate all related cache entries.
+6. Invalidate all related cache entries (table, constraints, indexes).
 
 ---
 
@@ -307,7 +305,7 @@ Display all tables in a database from the page-based catalog with statistics.
 **Function:**
 ```rust
 pub fn show_tables(
-    catalog: &Catalog,
+    catalog: &mut Catalog,
     pm: &mut CatalogPageManager,
     bm: &mut BufferManager,
     db_name: &str,
@@ -327,8 +325,8 @@ Retrieve complete table metadata including resolved columns, constraints, and in
 **Function:**
 ```rust
 pub fn get_table_metadata(
-    catalog: &Catalog,
-    pm: &CatalogPageManager,
+    catalog: &mut Catalog,
+    pm: &mut CatalogPageManager,
     bm: &mut BufferManager,
     db_name: &str,
     table_name: &str,
@@ -497,7 +495,7 @@ pub fn create_index(
 2. Generate an index name if not provided (`idx_{table_oid}_{col_oids}`).
 3. Create the indexes directory and `.idx` file with an initialised B-Tree root page.
 4. Allocate an `index_oid` and persist the index record to `pg_index`.
-5. Add the index OID to the table's in-memory `indexes` list.
+5. Invalidate the index cache for the table.
 
 ---
 
@@ -599,6 +597,211 @@ pub fn scan_catalog(
 ```
 
 Returns all live tuples from the catalog (skips logically deleted slots with `length == 0`).
+
+### `find_catalog_tuple`
+
+```rust
+pub fn find_catalog_tuple<F>(
+    &self, bm: &mut BufferManager, catalog_name: &str, predicate: F,
+) -> Result<(u32, u32, Vec<u8>), CatalogError>
+where
+    F: Fn(&[u8]) -> bool,
+```
+
+Scans the catalog until the predicate function returns `true` for a tuple. Returns `(page_num, slot_id, raw_bytes)` of the matching tuple, or `CatalogError::NotFound`.
+
+### `delete_catalog_tuple`
+
+```rust
+pub fn delete_catalog_tuple(
+    &mut self, bm: &mut BufferManager, catalog_name: &str, page_num: u32, slot_id: u32,
+) -> Result<(), CatalogError>
+```
+
+Marks a tuple as logically deleted by zeroing its slot's length field. The slot remains on the page but is skipped during scans.
+
+---
+
+## OID Management
+
+### `alloc_oid`
+
+**Description:**  
+Allocate a unique 32-bit OID for a new database object.
+
+**Function:**
+```rust
+pub fn alloc_oid(&mut self) -> u32
+```
+
+**Behavior:**
+- Increments the internal OID counter.
+- When `page_backend_active == true`, writes the new counter value to `pg_oid_counter.dat` immediately.
+- In JSON legacy mode, the counter is implicitly captured in `catalog.json`.
+- **Crash-safe:** OID is persisted to disk before returning.
+
+---
+
+## Cache Management
+
+### `invalidate_database`
+
+**Description:**  
+Invalidate cache entries for a database by name.
+
+**Function:**
+```rust
+pub fn invalidate_database(&mut self, db_name: &str)
+```
+
+**Usage:** Called after `create_database`, `drop_database`, and `alter_table_add_column`.
+
+### `invalidate_table`
+
+**Description:**  
+Invalidate cache entries for a specific table.
+
+**Function:**
+```rust
+pub fn invalidate_table(&mut self, db_oid: u32, table_name: &str)
+```
+
+### `invalidate_constraints`
+
+**Description:**  
+Invalidate all constraints associated with a table.
+
+**Function:**
+```rust
+pub fn invalidate_constraints(&mut self, table_oid: u32)
+```
+
+### `invalidate_indexes`
+
+**Description:**  
+Invalidate all indexes associated with a table.
+
+**Function:**
+```rust
+pub fn invalidate_indexes(&mut self, table_oid: u32)
+```
+
+### `invalidate_all`
+
+**Description:**  
+Clear all cache entries. Used sparingly (after major catalog restructuring).
+
+**Function:**
+```rust
+pub fn invalidate_all(&mut self)
+```
+
+---
+
+## Lookup Functions
+
+### `get_database`
+
+**Description:**  
+Retrieve a database by name via cache lookup or disk scan.
+
+**Function:**
+```rust
+pub fn get_database(
+    catalog: &Catalog,
+    pm: &CatalogPageManager,
+    bm: &mut BufferManager,
+    db_name: &str,
+) -> Result<Database, CatalogError>
+```
+
+**Behavior:**
+1. Check `catalog.cache` for the database.
+2. On cache miss, scan `pg_database` and return the first match.
+
+### `get_table`
+
+**Description:**  
+Retrieve a table by name within a database.
+
+**Function:**
+```rust
+pub fn get_table(
+    catalog: &mut Catalog,
+    pm: &mut CatalogPageManager,
+    bm: &mut BufferManager,
+    db_oid: u32,
+    table_name: &str,
+) -> Result<Table, CatalogError>
+```
+
+### `get_columns`
+
+**Description:**  
+Retrieve all columns for a table, sorted by position.
+
+**Function:**
+```rust
+pub fn get_columns(
+    pm: &CatalogPageManager,
+    bm: &mut BufferManager,
+    table_oid: u32,
+) -> Result<Vec<Column>, CatalogError>
+```
+
+---
+
+## Error Handling
+
+All public functions return `Result<T, CatalogError>`. The `CatalogError` enum provides detailed context for failures:
+
+| Error | Meaning |
+|-------|---------|
+| `DatabaseNotFound(String)` | Database with given name does not exist |
+| `DatabaseAlreadyExists(String)` | Database name is in use |
+| `TableNotFound(String)` | Table not found in the database |
+| `TableAlreadyExists(String)` | Table name already used in this database |
+| `ColumnNotFound(String)` | Column not found in table |
+| `TypeNotFound(String)` | Type name does not match any registered type |
+| `AlreadyHasPrimaryKey` | Table already has a PRIMARY KEY constraint |
+| `ForeignKeyDependency(String)` | Cannot drop table; foreign key references exist |
+| `ColumnCountMismatch` | Column count in constraint doesn't match referenced table |
+| `InvalidOperation(String)` | Operation not allowed in current state (e.g., NOT NULL column without default) |
+
+---
+
+## Example: Complete DDL Sequence
+
+```rust
+// Initialize catalog at startup
+init_catalog(&mut bm);
+let mut catalog = load_catalog(&mut bm);
+let mut pm = init_catalog_page_storage()?;
+
+// Create a database
+let db_oid = create_database(
+    &mut catalog, &mut pm, &mut bm,
+    "myapp", "appuser", Encoding::UTF8
+)?;
+
+// Create a table with columns and constraints
+let table_oid = create_table(
+    &mut catalog, &mut pm, &mut bm,
+    "myapp", "users",
+    vec![
+        ColumnDefinition { name: "id".into(), type_name: "INT".into(), is_nullable: false, .. },
+        ColumnDefinition { name: "email".into(), type_name: "VARCHAR(255)".into(), is_nullable: false, .. },
+    ],
+    vec![
+        ConstraintDefinition::PrimaryKey { columns: vec!["id".into()], name: None },
+        ConstraintDefinition::Unique { columns: vec!["email".into()], name: None },
+    ]
+)?;
+
+// Retrieve and display table metadata
+let metadata = get_table_metadata(&mut catalog, &mut pm, &mut bm, "myapp", "users")?;
+println!("Table: {} with {} columns", metadata.table_name, metadata.columns.len());
+```
 
 ### `delete_catalog_tuple`
 

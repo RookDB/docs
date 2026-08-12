@@ -70,7 +70,28 @@ pub enum DefaultValue {
 
 ---
 
-## 2. Column
+## Built-In Types Table
+
+RookDB provides 10 built-in types aligned with PostgreSQL conventions. Each type has a unique OID and metadata:
+
+| OID | Name | Category | Length | Align | Aliases |
+|-----|------|----------|--------|-------|---------|
+| 1 | INT | Numeric | 4 | 4 | INTEGER, INT32 |
+| 2 | BIGINT | Numeric | 8 | 8 | INT64 |
+| 3 | FLOAT | Numeric | 4 | 4 | REAL, FLOAT32 |
+| 4 | DOUBLE | Numeric | 8 | 8 | FLOAT64 |
+| 5 | BOOL | Boolean | 1 | 1 | BOOLEAN |
+| 6 | TEXT | String | -1 | 1 | STRING |
+| 7 | VARCHAR | String | -1 | 1 | VARCHAR(n) |
+| 8 | DATE | DateTime | 4 | 4 | — |
+| 9 | TIMESTAMP | DateTime | 8 | 8 | — |
+| 10 | BYTES | Binary | -1 | 1 | BYTEA, BLOB |
+
+**Note:** `Length = -1` indicates variable-length types stored with a 2-byte length prefix on disk.
+
+The type system is case-insensitive and supports aliases via `DataType::from_name()`.
+
+---
 
 ### `Column`
 
@@ -244,9 +265,6 @@ pub struct Table {
     pub table_oid: u32,
     pub table_name: String,
     pub db_oid: u32,
-    pub columns: Vec<Column>,
-    pub constraints: Vec<Constraint>,
-    pub indexes: Vec<u32>,              // OIDs of indexes on this table
     pub table_type: TableType,
     pub statistics: TableStatistics,
 }
@@ -302,19 +320,9 @@ A database entry, mirroring `pg_database`.
 pub struct Database {
     pub db_oid: u32,
     pub db_name: String,
-    pub tables: HashMap<String, Table>,
     pub owner: String,
     pub encoding: Encoding,
     pub created_at: u64,
-}
-```
-
-### `Encoding`
-
-```rust
-pub enum Encoding {
-    UTF8,   // 1
-    ASCII,  // 2
 }
 ```
 
@@ -328,7 +336,6 @@ Top-level catalog: databases in memory plus infrastructure fields.
 
 ```rust
 pub struct Catalog {
-    pub databases: HashMap<String, Database>,
     pub oid_counter: u32,
     pub bootstrap_mode: bool,
     pub page_backend_active: bool,
@@ -381,3 +388,5 @@ The catalog data structures are defined across the following files:
 | `indexes.rs` | Index creation, deletion, and B-Tree operations |
 | `catalog.rs` | High-level catalog operations (init, load, create/drop DB/table) |
 | `mod.rs` | Module declarations and re-exports |
+
+
